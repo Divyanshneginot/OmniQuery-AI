@@ -58,7 +58,8 @@ export const UploadDatasetModal: React.FC<UploadDatasetModalProps> = ({
     formData.append('file', file);
 
     try {
-      const res = await fetch('http://localhost:8000/api/dataset/upload', {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/$/, '');
+      const res = await fetch(`${apiBase}/dataset/upload`, {
         method: 'POST',
         body: formData
       });

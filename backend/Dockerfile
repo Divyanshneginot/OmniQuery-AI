@@ -21,5 +21,5 @@ COPY . .
 # Expose port (Cloud Run defaults to 8080)
 EXPOSE 8080
 
-# Run FastAPI with Uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run FastAPI with Uvicorn (adapts to cloud platforms like Cloud Run, Render, Railway)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
