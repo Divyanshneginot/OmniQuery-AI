@@ -1,4 +1,5 @@
 import json
+import asyncio
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
@@ -39,14 +40,41 @@ async def stream_query(req: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
     async def event_generator():
-        async for event in agent_orchestrator.run_pipeline(req.query):
-            yield f"data: {json.dumps(event)}\n\n"
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def produce_events():
+            try:
+                async for event in agent_orchestrator.run_pipeline(req.query):
+                    await queue.put(f"data: {json.dumps(event)}\n\n")
+            except Exception as e:
+                err_event = {"type": "error", "message": str(e)}
+                await queue.put(f"data: {json.dumps(err_event)}\n\n")
+            finally:
+                await queue.put(None)
+
+        producer_task = asyncio.create_task(produce_events())
+
+        # Yield immediate comment to flush HTTP response headers
+        yield ": connected\n\n"
+
+        while True:
+            try:
+                # Send keep-alive comment every 2.5 seconds if waiting on agent
+                item = await asyncio.wait_for(queue.get(), timeout=2.5)
+                if item is None:
+                    break
+                yield item
+            except asyncio.TimeoutError:
+                # Keeps connection active so QUIC and reverse proxies never time out
+                yield ": keep-alive\n\n"
+
+        await producer_task
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no"
         }
