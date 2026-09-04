@@ -26,7 +26,7 @@ const CURATED_PROMPTS = [
   {
     title: 'Box Office & Margins',
     description: 'Theatrical gross revenue, opening multipliers, and net profits by genre.',
-    query: 'Which movie genre yielded the highest net profit across European screens in Q2?',
+    query: 'Which movie genres yielded the highest net profit across European screens in Q2?',
     icon: Film,
     metric: '10,000 records'
   },
@@ -75,6 +75,7 @@ export const App: React.FC = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -126,6 +127,7 @@ export const App: React.FC = () => {
     setSteps([]);
     setQueryResult(null);
     setIsStreaming(true);
+    mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (!queryHistory.includes(q)) {
       setQueryHistory(prev => [q, ...prev.slice(0, 8)]);
@@ -166,6 +168,7 @@ export const App: React.FC = () => {
             } else if (eventData.type === 'complete' || eventData.type === 'result') {
               const payload = eventData.payload ?? eventData.data ?? eventData;
               setQueryResult(payload);
+              mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
               showToast(`Executed in ${payload.execution_time_ms}ms (${payload.total_rows} rows)`);
             } else if (eventData.type === 'error') {
               setError(eventData.message);
@@ -295,7 +298,7 @@ export const App: React.FC = () => {
         />
 
         {/* Scrollable Conversational Feed */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 flex flex-col items-center">
+        <main ref={mainRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 flex flex-col items-center">
           <div className="w-full max-w-3xl space-y-6">
             
             {/* User Inquiry Message */}

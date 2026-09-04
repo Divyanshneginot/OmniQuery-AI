@@ -419,9 +419,11 @@ ORDER BY total_revenue DESC;"""
             numeric_cols = [cols[1]]
 
         chart_type = "bar"
-        if any(k in sql.lower() for k in ["date", "time", "hour", "day", "month"]):
+        if len(rows) <= 1:
+            chart_type = "metric_cards"
+        elif any(k in sql.lower() for k in ["date", "time", "hour", "day", "month"]):
             chart_type = "line"
-        elif "sentiment" in sql.lower() or len(rows) <= 5:
+        elif "sentiment" in sql.lower() or (len(rows) <= 5 and len(rows) > 1):
             chart_type = "pie"
 
         total_rev = sum(r.get("total_revenue", 0) for r in rows) if "total_revenue" in cols else 0

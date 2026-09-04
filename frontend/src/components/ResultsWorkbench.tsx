@@ -26,7 +26,9 @@ import {
   ArrowRight,
   Search,
   X,
-  Code
+  Code,
+  Award,
+  Sparkles
 } from 'lucide-react';
 import type { QueryResultPayload } from '../types';
 import { SemanticSearchWidget } from './SemanticSearchWidget';
@@ -42,15 +44,63 @@ const PALETTE = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899
 
 const formatNumericValue = (val: number, keyName: string) => {
   const k = keyName.toLowerCase();
-  if (k.includes('revenue') || k.includes('amount') || k.includes('profit') || k.includes('gross')) {
-    if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(1)}M`;
-    if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}k`;
-    return `$${val.toLocaleString()}`;
+  const abs = Math.abs(val);
+  const sign = val < 0 ? '-' : '';
+
+  if (k.includes('revenue') || k.includes('amount') || k.includes('profit') || k.includes('gross') || k.includes('budget') || k.includes('spend') || k.includes('cost')) {
+    if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
+    if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
+    return `${sign}$${abs.toLocaleString()}`;
   }
   if (k.includes('latency') || k.includes('ms')) {
     return `${val.toLocaleString()} ms`;
   }
+  if (k.includes('pct') || k.includes('percent') || k.includes('rate')) {
+    return `${val.toFixed(1)}%`;
+  }
+  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}k`;
   return val.toLocaleString();
+};
+
+const getYAxisFormatter = (keys: string[]) => {
+  const isCurrency = keys.some(k => {
+    const l = k.toLowerCase();
+    return (
+      l.includes('revenue') ||
+      l.includes('profit') ||
+      l.includes('gross') ||
+      l.includes('budget') ||
+      l.includes('spend') ||
+      l.includes('cost') ||
+      l.includes('amount')
+    );
+  });
+  const isTime = keys.some(k => {
+    const l = k.toLowerCase();
+    return l.includes('latency') || l.includes('ms') || l.includes('duration');
+  });
+  const isPct = keys.some(k => {
+    const l = k.toLowerCase();
+    return l.includes('pct') || l.includes('percent') || l.includes('rate');
+  });
+
+  return (val: number | string) => {
+    const num = typeof val === 'number' ? val : Number(val);
+    if (isNaN(num)) return String(val);
+    if (num === 0) return '0';
+    const abs = Math.abs(num);
+    const sign = num < 0 ? '-' : '';
+    const prefix = isCurrency ? '$' : '';
+    const suffix = isTime ? ' ms' : isPct ? '%' : '';
+
+    if (abs >= 1_000_000_000) return `${prefix}${sign}${(abs / 1_000_000_000).toFixed(1)}B${suffix}`;
+    if (abs >= 1_000_000) return `${prefix}${sign}${(abs / 1_000_000).toFixed(1)}M${suffix}`;
+    if (abs >= 1_000) return `${prefix}${sign}${(abs / 1_000).toFixed(0)}k${suffix}`;
+    return `${prefix}${sign}${abs.toLocaleString()}${suffix}`;
+  };
 };
 
 interface TooltipEntry {
@@ -97,8 +147,10 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
     c.toLowerCase().includes('distance')
   );
 
-  const [viewMode, setViewMode] = useState<'chart' | 'table' | 'vector'>(
-    isVectorSearch ? 'vector' : 'chart'
+  const isSingleRecord = payload.rows.length === 1;
+
+  const [viewMode, setViewMode] = useState<'spotlight' | 'chart' | 'table' | 'vector'>(
+    isVectorSearch ? 'vector' : (isSingleRecord ? 'spotlight' : 'chart')
   );
   const [chartType, setChartType] = useState<string>(payload.chart_spec.chart_type || 'bar');
   const [isSqlExpanded, setIsSqlExpanded] = useState(false);
@@ -111,10 +163,36 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
 
   const { chart_spec, rows, columns, sql_query, execution_time_ms, rows_scanned, total_rows } = payload;
   const xKey = chart_spec.x_axis_key || (columns[0] || 'category');
-  const fallbackY = columns.length > 1 ? columns.slice(1, 3) : columns.slice(0, 1);
-  const yKeys = chart_spec.y_axis_keys && chart_spec.y_axis_keys.length > 0
-    ? chart_spec.y_axis_keys
-    : (fallbackY.length > 0 ? fallbackY : ['value']);
+  const yKeys = useMemo(() => {
+    const fallbackY = columns.length > 1 ? columns.slice(1, 3) : columns.slice(0, 1);
+    return chart_spec.y_axis_keys && chart_spec.y_axis_keys.length > 0
+      ? chart_spec.y_axis_keys
+      : (fallbackY.length > 0 ? fallbackY : ['value']);
+  }, [chart_spec.y_axis_keys, columns]);
+
+  const yAxisFormatter = useMemo(() => getYAxisFormatter(yKeys), [yKeys]);
+
+  const displayMetrics = useMemo(() => {
+    const list = [...(chart_spec.key_metrics || [])];
+    if (list.length === 0) {
+      return [
+        { label: 'Execution Latency', value: `${execution_time_ms} ms`, trend: 'positive' as const },
+        { label: 'Rows Scanned', value: rows_scanned.toLocaleString(), trend: 'neutral' as const },
+        { label: 'Result Records', value: total_rows.toLocaleString(), trend: 'neutral' as const }
+      ];
+    }
+    if (list.length === 1) {
+      list.push(
+        { label: 'Execution Latency', value: `${execution_time_ms} ms`, trend: 'positive' as const },
+        { label: 'Rows Scanned', value: rows_scanned.toLocaleString(), trend: 'neutral' as const }
+      );
+    } else if (list.length === 2) {
+      list.push(
+        { label: 'Execution Latency', value: `${execution_time_ms} ms`, trend: 'positive' as const }
+      );
+    }
+    return list.slice(0, 3);
+  }, [chart_spec.key_metrics, execution_time_ms, rows_scanned, total_rows]);
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(sql_query);
@@ -197,11 +275,11 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
     switch (chartType) {
       case 'line':
         return (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={280}>
             <LineChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
               <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
@@ -222,7 +300,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
 
       case 'area':
         return (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }}>
               <defs>
                 {yKeys.map((k, i) => (
@@ -234,7 +312,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
               <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
@@ -255,7 +333,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       case 'pie': {
         const pieSlice = rows.slice(0, 8);
         return (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={280}>
             <PieChart margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
@@ -282,11 +360,11 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       case 'bar':
       default:
         return (
-          <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
               <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
@@ -295,7 +373,8 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                   dataKey={k}
                   name={chart_spec.series_names?.[i] || k.replace(/_/g, ' ').toUpperCase()}
                   fill={PALETTE[i % PALETTE.length]}
-                  radius={[4, 4, 0, 0]}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={44}
                 />
               ))}
             </BarChart>
@@ -316,36 +395,17 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
         </div>
       )}
 
+      {/* 3 Balanced Metric KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {chart_spec.key_metrics && chart_spec.key_metrics.length > 0 ? (
-          chart_spec.key_metrics.slice(0, 3).map((metric, idx) => (
-            <div key={idx} className="p-3.5 rounded-xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{metric.label}</span>
-                {renderTrendIcon(metric.trend)}
-              </div>
-              <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">{metric.value}</div>
+        {displayMetrics.map((metric, idx) => (
+          <div key={idx} className="p-3.5 rounded-xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{metric.label}</span>
+              {renderTrendIcon(metric.trend)}
             </div>
-          ))
-        ) : (
-          <>
-            <div className="p-3.5 rounded-xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 shadow-2xs">
-              <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">Execution Latency</div>
-              <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">{execution_time_ms} ms</div>
-              <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">ClickHouse OLAP</div>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 shadow-2xs">
-              <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">Rows Scanned</div>
-              <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">{rows_scanned.toLocaleString()}</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">In-Memory Scan</div>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 shadow-2xs">
-              <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">Result Records</div>
-              <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">{total_rows.toLocaleString()}</div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Aggregated</div>
-            </div>
-          </>
-        )}
+            <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">{metric.value}</div>
+          </div>
+        ))}
       </div>
 
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#141620] overflow-hidden shadow-2xs">
@@ -362,6 +422,19 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
 
           <div className="flex items-center gap-2">
             <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-[#1e2130] text-xs">
+              {isSingleRecord && (
+                <button
+                  onClick={() => setViewMode('spotlight')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                    viewMode === 'spotlight'
+                      ? 'bg-white dark:bg-[#12141d] text-slate-900 dark:text-white shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Sparkles className="h-3 w-3 text-indigo-500" />
+                  <span>Spotlight</span>
+                </button>
+              )}
               <button
                 onClick={() => setViewMode('chart')}
                 className={`px-3 py-1 rounded-lg font-semibold transition-all ${
@@ -406,6 +479,59 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
             </button>
           </div>
         </div>
+
+        {viewMode === 'spotlight' && isSingleRecord && (
+          <div className="p-5 sm:p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-[#161925] border border-slate-200/80 dark:border-slate-800">
+              <div className="space-y-1.5">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold border border-indigo-200/60 dark:border-indigo-800/60">
+                  <Award className="h-3 w-3" />
+                  <span>Top Match • ClickHouse OLAP</span>
+                </div>
+                <h4 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                  {String(rows[0][xKey] ?? rows[0][columns[0]] ?? 'Result')}
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Primary record matching analytical criteria across studio dataset
+                </p>
+              </div>
+
+              <div className="sm:text-right">
+                <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  {yKeys[0]?.replace(/_/g, ' ') || 'Metric'}
+                </span>
+                <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono tracking-tight block mt-0.5">
+                  {typeof rows[0][yKeys[0]] === 'number'
+                    ? formatNumericValue(rows[0][yKeys[0]], yKeys[0])
+                    : String(rows[0][yKeys[0]] ?? '')}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Record Breakdown
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {columns.map((col) => (
+                  <div
+                    key={col}
+                    className="p-3 rounded-xl bg-white dark:bg-[#12141e] border border-slate-200/80 dark:border-slate-800/80 shadow-2xs"
+                  >
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate uppercase tracking-wider">
+                      {col.replace(/_/g, ' ')}
+                    </div>
+                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate mt-1 font-mono">
+                      {typeof rows[0][col] === 'number'
+                        ? formatNumericValue(rows[0][col], col)
+                        : String(rows[0][col] ?? '-')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {viewMode === 'chart' && (
           <div className="p-5 space-y-4">
