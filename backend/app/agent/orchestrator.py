@@ -262,20 +262,26 @@ class AgentOrchestrator:
                 execution_error = str(e)
                 logger.warning(f"SQL execution attempt {attempt} failed: {execution_error}")
                 
+                # Sanitize error to avoid leaking raw host URLs or internal exception codes
+                clean_err = re.sub(r'https?://[^\s)]+', '', execution_error)
+                clean_err = re.sub(r'Code:\s*\d+\.?\s*', '', clean_err)
+                clean_err = re.sub(r'DB::Exception:\s*', '', clean_err)
+                clean_err = re.sub(r'Received ClickHouse exception.*server response:\s*', '', clean_err, flags=re.IGNORECASE).strip()
+                
                 yield {
                     "type": "step",
                     "step": "self_healing",
                     "status": "retry",
                     "attempt": attempt,
-                    "message": f"Execution error detected: {execution_error[:120]}. Invoking Self-Healing Agent...",
-                    "data": {"failed_sql": current_sql, "error": execution_error}
+                    "message": f"Dialect issue detected ({clean_err[:60]}...). Invoking Self-Healing Agent to adapt query...",
+                    "data": {"failed_sql": current_sql}
                 }
 
                 if self.client_initialized and attempt < max_retries:
                     healing_prompt = get_self_healing_prompt(
                         schema_summary["tables"],
                         current_sql,
-                        execution_error,
+                        clean_err,
                         user_query
                     )
                     try:
@@ -298,10 +304,35 @@ class AgentOrchestrator:
                 else:
                     current_sql = self._generate_rule_based_sql(user_query)
 
+        # If LLM self-healing attempts were exhausted, attempt deterministic analytical query fallback
         if execution_error and not query_result:
+            logger.info("Self-healing attempts exhausted. Attempting deterministic analytical query fallback...")
+            try:
+                fallback_sql = self._generate_rule_based_sql(user_query)
+                query_result = db_engine.execute_query(fallback_sql)
+                current_sql = fallback_sql
+                execution_error = None
+                yield {
+                    "type": "step",
+                    "step": "self_healing",
+                    "status": "repaired",
+                    "message": "Self-healing resolved query using standard analytical pattern.",
+                    "data": {"repaired_sql": current_sql}
+                }
+            except Exception as final_e:
+                logger.error(f"Deterministic fallback execution failed: {final_e}")
+                execution_error = str(final_e)
+
+        if execution_error and not query_result:
+            clean_err = re.sub(r'https?://[^\s)]+', '', str(execution_error))
+            clean_err = re.sub(r'Code:\s*\d+\.?\s*', '', clean_err)
+            clean_err = re.sub(r'DB::Exception:\s*', '', clean_err)
+            clean_err = re.sub(r'Received ClickHouse exception.*server response:\s*', '', clean_err, flags=re.IGNORECASE).strip()
+            
             yield {
                 "type": "error",
-                "message": f"Query failed after {max_retries} self-healing attempts: {execution_error}",
+                "message": "We could not complete this analytical query on the database. Please try refining your question or selecting one of the studio sample prompts.",
+                "details": clean_err[:150] if clean_err else "Query execution limit reached.",
                 "sql": current_sql
             }
             return

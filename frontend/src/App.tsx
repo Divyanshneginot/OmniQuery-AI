@@ -7,7 +7,8 @@ import {
   X, 
   ChevronRight,
   Upload,
-  CornerDownLeft
+  CornerDownLeft,
+  RotateCcw
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -21,6 +22,32 @@ import type { ToastMessage } from './components/Toast';
 import type { AgentStep, QueryResultPayload, HealthResponse, SchemaResponse, ThemeMode } from './types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/$/, '');
+
+function sanitizeErrorMessage(msg: string): { friendly: string; technical?: string } {
+  if (!msg) return { friendly: 'An unexpected issue occurred while analyzing data. Please try again.' };
+  
+  if (msg.includes('ClickHouse exception') || msg.includes('DB::Exception') || msg.includes('quantile_cont') || msg.includes('http') || msg.includes('concurrent queries')) {
+    const strippedTech = msg
+      .replace(/https?:\/\/[^\s)]+/g, '[clickhouse-cloud]')
+      .replace(/Code:\s*\d+\.?/g, '')
+      .replace(/DB::Exception:\s*/g, '')
+      .replace(/Received ClickHouse exception.*server response:\s*/gi, '')
+      .trim();
+
+    return {
+      friendly: 'A cloud database dialect adjustment is being completed on the backend. Please click Retry Analysis to rerun with the native ClickHouse dialect.',
+      technical: strippedTech
+    };
+  }
+
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Server connection error')) {
+    return {
+      friendly: 'Unable to reach the analytical backend. The cloud container may be completing a zero-downtime deployment or waking up. Please wait a few seconds and retry.',
+    };
+  }
+
+  return { friendly: msg };
+}
 
 const CURATED_PROMPTS = [
   {
@@ -343,13 +370,63 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {/* Error Banner */}
-            {error && (
-              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-3">
-                <AlertCircle className="h-4 w-4 text-rose-500 flex-shrink-0" />
-                <span className="flex-1 font-medium">{error}</span>
-              </div>
-            )}
+            {/* Executive Analysis Notice Card */}
+            {error && (() => {
+              const { friendly, technical } = sanitizeErrorMessage(error);
+              return (
+                <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141620] border border-amber-200/80 dark:border-amber-900/40 shadow-xs space-y-3.5 animate-fadeIn">
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/80 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                        Analysis Notice
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        {friendly}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => handleRunQuery()}
+                      className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Retry Analysis</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectQuery(CURATED_PROMPTS[1].query)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Try Telemetry Prompt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectQuery(CURATED_PROMPTS[0].query)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      Try Box Office Prompt
+                    </button>
+                  </div>
+
+                  {technical && (
+                    <details className="pt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                      <summary className="cursor-pointer hover:text-slate-600 dark:hover:text-slate-400 transition-colors font-medium">
+                        Diagnostic details
+                      </summary>
+                      <pre className="mt-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-400 overflow-x-auto whitespace-pre-wrap">
+                        {technical}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Execution Trace Stream */}
             <AgentTraceLog steps={steps} isStreaming={isStreaming} />

@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import threading
 from typing import Dict, Any, List, Optional
 import duckdb
 import pandas as pd
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseEngine:
     def __init__(self):
+        self._lock = threading.Lock()
         self.is_cloud_clickhouse = False
         self.client = None
         self.duck_conn = None
@@ -272,43 +274,44 @@ class DatabaseEngine:
 
         start_time = time.perf_counter()
 
-        if self.is_cloud_clickhouse and self.client:
-            # Enforce Query Complexity Guardrails
-            settings = {
-                "max_execution_time": 10,
-                "max_rows_to_read": 50000000,
-                "max_result_rows": 10000,
-            }
-            result = self.client.query(cleaned_sql, settings=settings)
-            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-            columns = result.column_names
-            rows = [dict(zip(columns, row)) for row in result.result_rows]
-            return {
-                "success": True,
-                "columns": columns,
-                "rows": rows[:500], # capped at 500 rows for rendering
-                "total_rows_returned": len(rows),
-                "execution_time_ms": duration_ms,
-                "rows_scanned": result.summary.get("read_rows", len(rows)) if hasattr(result, "summary") else len(rows),
-                "database_mode": self.mode
-            }
-        else:
-            # Map ClickHouse specific functions to standard SQL if running in local DuckDB mode
-            mapped_sql = self._map_clickhouse_syntax_to_duckdb(cleaned_sql)
-            res = self.duck_conn.execute(mapped_sql)
-            columns = [desc[0] for desc in res.description]
-            raw_rows = res.fetchall()
-            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-            rows = [dict(zip(columns, row)) for row in raw_rows]
-            return {
-                "success": True,
-                "columns": columns,
-                "rows": rows[:500],
-                "total_rows_returned": len(rows),
-                "execution_time_ms": duration_ms,
-                "rows_scanned": len(rows), # fallback using actual returned rows instead of fake multiplier
-                "database_mode": self.mode
-            }
+        with self._lock:
+            if self.is_cloud_clickhouse and self.client:
+                # Enforce Query Complexity Guardrails
+                settings = {
+                    "max_execution_time": 10,
+                    "max_rows_to_read": 50000000,
+                    "max_result_rows": 10000,
+                }
+                result = self.client.query(cleaned_sql, settings=settings)
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                columns = result.column_names
+                rows = [dict(zip(columns, row)) for row in result.result_rows]
+                return {
+                    "success": True,
+                    "columns": columns,
+                    "rows": rows[:500], # capped at 500 rows for rendering
+                    "total_rows_returned": len(rows),
+                    "execution_time_ms": duration_ms,
+                    "rows_scanned": result.summary.get("read_rows", len(rows)) if hasattr(result, "summary") else len(rows),
+                    "database_mode": self.mode
+                }
+            else:
+                # Map ClickHouse specific functions to standard SQL if running in local DuckDB mode
+                mapped_sql = self._map_clickhouse_syntax_to_duckdb(cleaned_sql)
+                res = self.duck_conn.execute(mapped_sql)
+                columns = [desc[0] for desc in res.description]
+                raw_rows = res.fetchall()
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                rows = [dict(zip(columns, row)) for row in raw_rows]
+                return {
+                    "success": True,
+                    "columns": columns,
+                    "rows": rows[:500],
+                    "total_rows_returned": len(rows),
+                    "execution_time_ms": duration_ms,
+                    "rows_scanned": len(rows), # fallback using actual returned rows instead of fake multiplier
+                    "database_mode": self.mode
+                }
 
     def _map_clickhouse_syntax_to_duckdb(self, sql: str) -> str:
         """Helper to ensure ClickHouse dialect functions execute transparently on embedded engine."""
