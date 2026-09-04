@@ -318,8 +318,8 @@ class DatabaseEngine:
         s = re.sub(r'cosineDistance\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)', r'(1.0 - list_cosine_similarity(\1, \2))', s)
         s = re.sub(r'L2Distance\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)', r'list_distance(\1, \2)', s)
 
-        # ClickHouse quantile(P)(col) -> quantile_cont(col, P)
-        s = re.sub(r'quantile\s*\(\s*([0-9.]+)\s*\)\s*\(\s*([^)]+)\s*\)', r'quantile_cont(\2, \1)', s)
+        # ClickHouse quantile(P)(col) or quantileExact(P)(col) -> quantile_cont(col, P)
+        s = re.sub(r'quantile(?:Exact)?\s*\(\s*([0-9.]+)\s*\)\s*\(\s*([^)]+)\s*\)', r'quantile_cont(\2, \1)', s)
         s = re.sub(r'quantile_cont\s*\(\s*([0-9.]+)\s*\)\s*\(\s*([^)]+)\s*\)', r'quantile_cont(\2, \1)', s)
         
         # ClickHouse uniqExact(col) -> count(DISTINCT col)

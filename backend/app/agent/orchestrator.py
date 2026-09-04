@@ -48,6 +48,8 @@ class AgentOrchestrator:
 
     def _extract_sql_from_response(self, text: str) -> str:
         """Extracts SQL from markdown code block or plain text."""
+        if not text:
+            return ""
         match = re.search(r"```(?:sql)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
         if match:
             return match.group(1).strip()
@@ -109,22 +111,24 @@ class AgentOrchestrator:
             session_id = str(uuid.uuid4())
             await session_svc.create_session(app_name="omniquery", user_id="demo_user", session_id=session_id)
             
-            full_text = ""
-            async with runner:
-                async for event in runner.run_async(
-                    user_id="demo_user",
-                    session_id=session_id,
-                    new_message=types.Content(
-                        role="user", 
-                        parts=[types.Part.from_text(text=prompt)]
-                    )
-                ):
-                    if event.content and event.content.parts:
-                        for part in event.content.parts:
-                            if part.text:
-                                full_text += part.text
+            async def _run_adk():
+                text_accum = ""
+                async with runner:
+                    async for event in runner.run_async(
+                        user_id="demo_user",
+                        session_id=session_id,
+                        new_message=types.Content(
+                            role="user", 
+                            parts=[types.Part.from_text(text=prompt)]
+                        )
+                    ):
+                        if event.content and event.content.parts:
+                            for part in event.content.parts:
+                                if part.text:
+                                    text_accum += part.text
+                return text_accum
             
-            return full_text
+            return await asyncio.wait_for(_run_adk(), timeout=12.0)
             
         except Exception as adk_error:
             logger.warning(f"ADK invocation failed, falling back to raw genai client: {adk_error}")
@@ -211,6 +215,8 @@ class AgentOrchestrator:
             try:
                 raw_response = await self._call_gemini_async(prompt)
                 generated_sql = self._extract_sql_from_response(raw_response)
+                if not generated_sql:
+                    generated_sql = self._generate_rule_based_sql(user_query)
             except Exception as e:
                 logger.error(f"Gemini SQL generation error: {e}")
                 generated_sql = self._generate_rule_based_sql(user_query)
@@ -274,7 +280,11 @@ class AgentOrchestrator:
                     )
                     try:
                         repaired_resp = await self._call_gemini_async(healing_prompt)
-                        current_sql = self._extract_sql_from_response(repaired_resp)
+                        repaired_sql = self._extract_sql_from_response(repaired_resp)
+                        if repaired_sql:
+                            current_sql = repaired_sql
+                        else:
+                            current_sql = self._generate_rule_based_sql(user_query)
                         yield {
                             "type": "step",
                             "step": "self_healing",
@@ -327,7 +337,10 @@ class AgentOrchestrator:
             )
             try:
                 vis_resp = await self._call_gemini_async(vis_prompt)
-                chart_spec = self._extract_json_from_response(vis_resp)
+                if vis_resp and vis_resp.strip():
+                    chart_spec = self._extract_json_from_response(vis_resp)
+                else:
+                    chart_spec = self._generate_heuristic_chart_spec(user_query, current_sql, query_result)
             except Exception as ve:
                 logger.error(f"Visualization synthesis error: {ve}")
                 chart_spec = self._generate_heuristic_chart_spec(user_query, current_sql, query_result)
@@ -372,10 +385,18 @@ GROUP BY service_name, status_code
 ORDER BY error_count DESC
 LIMIT 20;"""
             elif "percentile" in q or "p95" in q or "95th" in q:
-                return """SELECT service_name, round(avg(latency_ms), 2) as avg_latency, round(quantile_cont(0.95)(latency_ms), 2) as p95_latency_ms, count(*) as request_volume
+                if "endpoint" in q:
+                    return """SELECT service_name, endpoint, round(avg(latency_ms), 2) as avg_latency_ms, round(quantileExact(0.95)(latency_ms), 2) as p95_latency_ms, sum(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count, count(*) as request_volume
+FROM streaming_platform_metrics
+GROUP BY service_name, endpoint
+ORDER BY p95_latency_ms DESC
+LIMIT 15;"""
+                else:
+                    return """SELECT service_name, round(avg(latency_ms), 2) as avg_latency_ms, round(quantileExact(0.95)(latency_ms), 2) as p95_latency_ms, sum(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count, count(*) as request_volume
 FROM streaming_platform_metrics
 GROUP BY service_name
-ORDER BY p95_latency_ms DESC;"""
+ORDER BY p95_latency_ms DESC
+LIMIT 15;"""
             else:
                 return """SELECT service_name, round(avg(latency_ms), 2) as avg_latency_ms, round(avg(cpu_usage_pct), 2) as avg_cpu_pct, count(*) as total_requests
 FROM streaming_platform_metrics
@@ -441,6 +462,12 @@ ORDER BY total_revenue DESC;"""
             metrics.append({"label": "Rows Scanned", "value": f"{scanned_int:,}", "trend": "neutral"})
         except Exception:
             metrics.append({"label": "Rows Scanned", "value": str(result.get('rows_scanned', len(rows))), "trend": "neutral"})
+
+        try:
+            lat = result.get('execution_time_ms', 0)
+            metrics.append({"label": "Execution Latency", "value": f"{lat:.1f} ms", "trend": "positive" if lat < 300 else "neutral"})
+        except Exception:
+            pass
 
         return {
             "title": f"Analytical Breakdown by {x_key.replace('_', ' ').title()}",
