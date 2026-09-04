@@ -12,7 +12,7 @@ const SAMPLE_SQL_QUERIES = [
   },
   {
     label: "p95 Latency by Service",
-    sql: `SELECT service_name, round(avg(latency_ms), 1) as avg_latency, round(quantile_cont(0.95)(latency_ms), 1) as p95_latency, count(*) as req_count\nFROM streaming_platform_metrics\nGROUP BY service_name\nORDER BY p95_latency DESC;`
+    sql: `SELECT service_name, round(avg(latency_ms), 1) as avg_latency, round(quantileExact(0.95)(latency_ms), 1) as p95_latency, count(*) as req_count\nFROM streaming_platform_metrics\nGROUP BY service_name\nORDER BY p95_latency DESC;`
   },
   {
     label: "Top 5 Global Profit Movies",

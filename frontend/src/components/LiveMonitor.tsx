@@ -28,7 +28,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({ onExecuteSql }) => {
   const fetchLiveMetrics = async () => {
     setLoading(true);
     try {
-      const telemetrySql = `SELECT service_name, round(avg(latency_ms), 1) as avg_latency_ms, round(quantile_cont(0.95)(latency_ms), 1) as p95_latency_ms, count(*) as req_count FROM streaming_platform_metrics GROUP BY service_name ORDER BY p95_latency_ms DESC;`;
+      const telemetrySql = `SELECT service_name, round(avg(latency_ms), 1) as avg_latency_ms, round(quantileExact(0.95)(latency_ms), 1) as p95_latency_ms, count(*) as req_count FROM streaming_platform_metrics GROUP BY service_name ORDER BY p95_latency_ms DESC;`;
       
       const errorSql = `SELECT service_name, status_code, count(*) as error_count FROM streaming_platform_metrics WHERE status_code >= 400 GROUP BY service_name, status_code ORDER BY error_count DESC LIMIT 5;`;
       

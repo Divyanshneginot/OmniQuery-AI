@@ -274,44 +274,65 @@ class DatabaseEngine:
 
         start_time = time.perf_counter()
 
-        with self._lock:
-            if self.is_cloud_clickhouse and self.client:
-                # Enforce Query Complexity Guardrails
-                settings = {
-                    "max_execution_time": 10,
-                    "max_rows_to_read": 50000000,
-                    "max_result_rows": 10000,
-                }
-                result = self.client.query(cleaned_sql, settings=settings)
-                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-                columns = result.column_names
-                rows = [dict(zip(columns, row)) for row in result.result_rows]
-                return {
-                    "success": True,
-                    "columns": columns,
-                    "rows": rows[:500], # capped at 500 rows for rendering
-                    "total_rows_returned": len(rows),
-                    "execution_time_ms": duration_ms,
-                    "rows_scanned": result.summary.get("read_rows", len(rows)) if hasattr(result, "summary") else len(rows),
-                    "database_mode": self.mode
-                }
-            else:
-                # Map ClickHouse specific functions to standard SQL if running in local DuckDB mode
-                mapped_sql = self._map_clickhouse_syntax_to_duckdb(cleaned_sql)
-                res = self.duck_conn.execute(mapped_sql)
-                columns = [desc[0] for desc in res.description]
-                raw_rows = res.fetchall()
-                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-                rows = [dict(zip(columns, row)) for row in raw_rows]
-                return {
-                    "success": True,
-                    "columns": columns,
-                    "rows": rows[:500],
-                    "total_rows_returned": len(rows),
-                    "execution_time_ms": duration_ms,
-                    "rows_scanned": len(rows), # fallback using actual returned rows instead of fake multiplier
-                    "database_mode": self.mode
-                }
+        try:
+            with self._lock:
+                if self.is_cloud_clickhouse and self.client:
+                    # Enforce Query Complexity Guardrails
+                    settings = {
+                        "max_execution_time": 10,
+                        "max_rows_to_read": 50000000,
+                        "max_result_rows": 10000,
+                    }
+                    mapped_sql = self._map_duckdb_syntax_to_clickhouse(cleaned_sql)
+                    result = self.client.query(mapped_sql, settings=settings)
+                    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                    columns = result.column_names
+                    rows = [dict(zip(columns, row)) for row in result.result_rows]
+                    return {
+                        "success": True,
+                        "columns": columns,
+                        "rows": rows[:500], # capped at 500 rows for rendering
+                        "total_rows_returned": len(rows),
+                        "execution_time_ms": duration_ms,
+                        "rows_scanned": result.summary.get("read_rows", len(rows)) if hasattr(result, "summary") else len(rows),
+                        "database_mode": self.mode
+                    }
+                else:
+                    # Map ClickHouse specific functions to standard SQL if running in local DuckDB mode
+                    mapped_sql = self._map_clickhouse_syntax_to_duckdb(cleaned_sql)
+                    res = self.duck_conn.execute(mapped_sql)
+                    columns = [desc[0] for desc in res.description]
+                    raw_rows = res.fetchall()
+                    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                    rows = [dict(zip(columns, row)) for row in raw_rows]
+                    return {
+                        "success": True,
+                        "columns": columns,
+                        "rows": rows[:500],
+                        "total_rows_returned": len(rows),
+                        "execution_time_ms": duration_ms,
+                        "rows_scanned": len(rows), # fallback using actual returned rows instead of fake multiplier
+                        "database_mode": self.mode
+                    }
+        except Exception as e:
+            err_msg = str(e)
+            # Mask internal database URLs, ports, and C++ exception codes to prevent credential or infrastructure leakage
+            err_msg = re.sub(r'https?://[^\s)]+', '[ClickHouse Cloud]', err_msg).strip()
+            err_msg = re.sub(r'Code:\s*\d+\.\s*', '', err_msg)
+            err_msg = re.sub(r'DB::Exception:\s*', '', err_msg)
+            raise RuntimeError(err_msg) from e
+
+    def _map_duckdb_syntax_to_clickhouse(self, sql: str) -> str:
+        """Helper to ensure standard SQL / DuckDB functions execute transparently on ClickHouse Cloud."""
+        import re
+        s = sql
+        # quantile_cont(P)(col) -> quantileExact(P)(col)
+        s = re.sub(r'quantile_cont\s*\(\s*([0-9.]+)\s*\)\s*\(\s*([^)]+)\s*\)', r'quantileExact(\1)(\2)', s)
+        # quantile_cont(col, P) -> quantileExact(P)(col)
+        s = re.sub(r'quantile_cont\s*\(\s*([^,]+)\s*,\s*([0-9.]+)\s*\)', r'quantileExact(\2)(\1)', s)
+        # percentile_cont(P) WITHIN GROUP (ORDER BY col) -> quantileExact(P)(col)
+        s = re.sub(r'percentile_cont\s*\(\s*([0-9.]+)\s*\)\s*WITHIN\s+GROUP\s*\(\s*ORDER\s+BY\s+([^)]+)\s*\)', r'quantileExact(\1)(\2)', s, flags=re.IGNORECASE)
+        return s
 
     def _map_clickhouse_syntax_to_duckdb(self, sql: str) -> str:
         """Helper to ensure ClickHouse dialect functions execute transparently on embedded engine."""

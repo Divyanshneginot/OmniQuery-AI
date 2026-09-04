@@ -434,6 +434,21 @@ FROM streaming_platform_metrics
 GROUP BY service_name
 ORDER BY avg_latency_ms DESC;"""
 
+        elif "pacing" in q or "complaint" in q:
+            return """SELECT comment, sentiment, rating, genre, topic_cluster
+FROM audience_reviews
+WHERE topic_cluster = 'pacing_complaint' OR lower(comment) LIKE '%pacing%'
+ORDER BY rating ASC
+LIMIT 10;"""
+
+        elif "profit" in q or "net" in q or "european" in q or "europe" in q or "q2" in q:
+            return """SELECT genre, sum(net_profit) as total_profit, sum(gross_revenue) as total_gross, count(*) as movie_count
+FROM box_office_revenue
+WHERE territory = 'Europe' AND release_window = 'Theatrical'
+GROUP BY genre
+ORDER BY total_profit DESC
+LIMIT 6;"""
+
         elif "feedback" in q or "review" in q or "sentiment" in q or "rating" in q:
             return """SELECT genre, sentiment, count(*) as feedback_count, round(avg(rating), 2) as avg_rating
 FROM audience_reviews
