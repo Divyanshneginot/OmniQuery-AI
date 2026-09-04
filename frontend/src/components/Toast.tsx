@@ -14,7 +14,7 @@ interface ToastContainerProps {
 
 export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismiss }) => {
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none select-none font-mono text-xs">
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none select-none text-xs">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
@@ -33,35 +33,36 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
     return () => clearTimeout(timer);
   }, [toast.id, onDismiss]);
 
-  const getIcon = () => {
+  const getToastConfig = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />;
+        return {
+          icon: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />,
+          classes: 'border-emerald-200 dark:border-emerald-800/60 bg-white/95 dark:bg-[#141620]/95 text-slate-900 dark:text-slate-100'
+        };
       case 'error':
-        return <AlertCircle className="h-4 w-4 text-rose-400 flex-shrink-0" />;
+        return {
+          icon: <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />,
+          classes: 'border-rose-200 dark:border-rose-800/60 bg-white/95 dark:bg-[#141620]/95 text-slate-900 dark:text-slate-100'
+        };
       default:
-        return <Info className="h-4 w-4 text-cyan-400 flex-shrink-0" />;
+        return {
+          icon: <Info className="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />,
+          classes: 'border-indigo-200 dark:border-indigo-800/60 bg-white/95 dark:bg-[#141620]/95 text-slate-900 dark:text-slate-100'
+        };
     }
   };
 
-  const getBorderColor = () => {
-    switch (toast.type) {
-      case 'success':
-        return 'border-emerald-500/40 bg-emerald-950/40';
-      case 'error':
-        return 'border-rose-500/40 bg-rose-950/40';
-      default:
-        return 'border-cyan-500/40 bg-cyan-950/40';
-    }
-  };
+  const { icon, classes } = getToastConfig();
 
   return (
-    <div className={`pointer-events-auto cinema-glass border ${getBorderColor()} text-zinc-100 px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 min-w-[260px] max-w-sm backdrop-blur-xl animate-fadeIn`}>
-      {getIcon()}
+    <div className={`pointer-events-auto border ${classes} px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 min-w-[260px] max-w-sm backdrop-blur-md animate-fadeIn`}>
+      {icon}
       <span className="flex-1 text-[11px] font-medium leading-tight">{toast.message}</span>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="text-zinc-500 hover:text-zinc-200 p-0.5 transition-colors"
+        aria-label="Dismiss toast"
+        className="text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300 p-0.5 transition-colors rounded"
       >
         <X className="h-3.5 w-3.5" />
       </button>
