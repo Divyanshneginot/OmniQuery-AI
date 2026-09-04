@@ -1,64 +1,48 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   AlertCircle, 
-  CornerDownLeft, 
-  Sparkles, 
   Film, 
-  Zap, 
-  BarChart3, 
   BrainCircuit, 
   Activity, 
-  Database, 
   X, 
-  SlidersHorizontal,
   ChevronRight,
-  Flame
+  Upload,
+  CornerDownLeft
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { AgentTraceLog } from './components/AgentTraceLog';
 import { ResultsWorkbench } from './components/ResultsWorkbench';
 import { SettingsModal } from './components/SettingsModal';
-import { SqlPlayground } from './components/SqlPlayground';
-import { LiveMonitor } from './components/LiveMonitor';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { UploadDatasetModal } from './components/UploadDatasetModal';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
-import type { AgentStep, QueryResultPayload, HealthResponse, SchemaResponse } from './types';
+import type { AgentStep, QueryResultPayload, HealthResponse, SchemaResponse, ThemeMode } from './types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/$/, '');
 
-const QUICK_PRESETS = [
+const CURATED_PROMPTS = [
   {
+    title: 'Box Office & Margins',
+    description: 'Theatrical gross revenue, opening multipliers, and net profits by genre.',
+    query: 'Which movie genre yielded the highest net profit across European screens in Q2?',
     icon: Film,
-    label: 'Box Office ROI by Genre',
-    query: 'Total gross revenue and average opening weekend by genre',
-    color: 'text-zinc-400 border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:text-zinc-200'
+    metric: '10,000 records'
   },
   {
-    icon: Zap,
-    label: 'p95 Streaming Latency',
-    query: '95th percentile streaming CDN latency per service',
-    color: 'text-zinc-400 border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:text-zinc-200'
+    title: 'Streaming CDN Telemetry',
+    description: 'p95 player latency, HTTP 5xx error spikes, and edge QoS metrics.',
+    query: 'Show me 95th percentile streaming latency and error counts per service endpoint.',
+    icon: Activity,
+    metric: '15,000 logs'
   },
   {
+    title: 'Audience Review Sentiment',
+    description: 'Semantic vector similarity on screenplay pacing and visual effects feedback.',
+    query: 'Find audience reviews complaining about pacing issues using semantic search.',
     icon: BrainCircuit,
-    label: 'Vector: Pacing Complaints',
-    query: 'Find audience reviews complaining about pacing issues using semantic search',
-    color: 'text-zinc-400 border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:text-zinc-200'
-  },
-  {
-    icon: BarChart3,
-    label: 'Top Studio Distributors',
-    query: 'Which distributors have the highest net profit across all territories?',
-    color: 'text-zinc-400 border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:text-zinc-200'
-  },
-  {
-    icon: Flame,
-    label: 'Vector: CGI & VFX Sentiment',
-    query: 'Semantic search for negative audience feedback about bad CGI or visual effects',
-    color: 'text-zinc-400 border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:text-zinc-200'
+    metric: '5,000 reviews'
   }
 ];
 
@@ -70,16 +54,43 @@ export const App: React.FC = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [queryResult, setQueryResult] = useState<QueryResultPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeMode, setActiveMode] = useState<'agent' | 'sql' | 'monitor'>('agent');
-  const [queryHistory, setQueryHistory] = useState<string[]>([]);
-  
-  // Modals & Toasts
+  const [queryHistory, setQueryHistory] = useState<string[]>([
+    'Which movie genre yielded the highest net profit across European screens in Q2?',
+    'Show me 95th percentile streaming latency and error counts per service endpoint.',
+    'Find audience reviews complaining about pacing issues using semantic search.'
+  ]);
+
+  // Theme & Sidebar State
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Modals & Notifications
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = `${Date.now()}-${Math.random()}`;
@@ -90,11 +101,7 @@ export const App: React.FC = () => {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  useEffect(() => {
-    fetchHealthAndSchema();
-  }, []);
-
-  const fetchHealthAndSchema = async () => {
+  const fetchHealthAndSchema = useCallback(async () => {
     try {
       const [healthRes, schemaRes] = await Promise.all([
         fetch(`${API_BASE_URL}/health`),
@@ -102,10 +109,14 @@ export const App: React.FC = () => {
       ]);
       if (healthRes.ok) setHealth(await healthRes.json());
       if (schemaRes.ok) setSchema(await schemaRes.json());
-    } catch (err) {
+    } catch {
       console.warn('Backend offline or initializing...');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchHealthAndSchema();
+  }, [fetchHealthAndSchema]);
 
   const handleRunQuery = async (targetQuery?: string) => {
     const q = (targetQuery || query).trim();
@@ -137,43 +148,54 @@ export const App: React.FC = () => {
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const eventData = JSON.parse(line.slice(6));
-              if (eventData.type === 'step') {
-                setSteps((prev) => {
-                  const existingIdx = prev.findIndex((s) => s.step === eventData.step);
-                  if (existingIdx >= 0) {
-                    const copy = [...prev];
-                    copy[existingIdx] = eventData;
-                    return copy;
-                  }
-                  return [...prev, eventData];
-                });
-              } else if (eventData.type === 'complete') {
-                setQueryResult(eventData.payload);
-                showToast(`Executed in ${eventData.payload.execution_time_ms}ms (${eventData.payload.total_rows} rows)`);
-              } else if (eventData.type === 'error') {
-                setError(eventData.message);
-                showToast(eventData.message, 'error');
-              }
-            } catch (jsonErr) {
-              console.error('Error parsing SSE line:', jsonErr);
+      const processLine = (line: string) => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const eventData = JSON.parse(trimmed.slice(6));
+            if (eventData.type === 'step') {
+              setSteps((prev) => {
+                const existingIdx = prev.findIndex((s) => s.step === eventData.step);
+                if (existingIdx >= 0) {
+                  const copy = [...prev];
+                  copy[existingIdx] = eventData;
+                  return copy;
+                }
+                return [...prev, eventData];
+              });
+            } else if (eventData.type === 'complete' || eventData.type === 'result') {
+              const payload = eventData.payload ?? eventData.data ?? eventData;
+              setQueryResult(payload);
+              showToast(`Executed in ${payload.execution_time_ms}ms (${payload.total_rows} rows)`);
+            } else if (eventData.type === 'error') {
+              setError(eventData.message);
+              showToast(eventData.message, 'error');
             }
+          } catch (jsonErr) {
+            console.error('Error parsing SSE line:', jsonErr);
           }
         }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          if (buffer.trim()) {
+            buffer.split(/\r?\n/).forEach(processLine);
+          }
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n\r?\n/);
+        buffer = lines.pop() || '';
+
+        for (const block of lines) {
+          block.split(/\r?\n/).forEach(processLine);
+        }
       }
-    } catch (err: any) {
-      const msg = err.message || 'Server connection error';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Server connection error';
       setError(msg);
       showToast(msg, 'error');
     } finally {
@@ -181,54 +203,41 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleExecuteRawSql = async (sql: string) => {
-    const res = await fetch(`${API_BASE_URL}/sql/raw`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql }),
-    });
-    if (!res.ok) {
-      const errData = await res.json();
-      throw new Error(errData.detail || 'SQL query failed');
-    }
-    const data = await res.json();
-    showToast(`SQL executed in ${data.execution_time_ms}ms`);
-    return data;
-  };
-
   const handleSelectQuery = (selectedQuery: string) => {
     setQuery(selectedQuery);
-    setActiveMode('agent');
     handleRunQuery(selectedQuery);
   };
 
-  // Keyboard shortcut listener
+  const handleNewAnalysis = () => {
+    setQueryResult(null);
+    setSteps([]);
+    setError(null);
+    setQuery('');
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+  };
+
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ⌘+K or Ctrl+K -> Focus Search
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setActiveMode('agent');
-        setTimeout(() => {
-          inputRef.current?.focus();
-          inputRef.current?.select();
-        }, 50);
+        inputRef.current?.focus();
+        inputRef.current?.select();
       }
-      // 1, 2, 3 -> Switch Mode (when not typing in an input)
-      if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-        if (e.key === '1') setActiveMode('agent');
-        if (e.key === '2') setActiveMode('sql');
-        if (e.key === '3') setActiveMode('monitor');
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewAnalysis();
       }
-      // ? -> Open Shortcuts Modal
       if (e.key === '?' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
         setIsShortcutsOpen(prev => !prev);
       }
-      // Esc -> Close modals
       if (e.key === 'Escape') {
         setIsSettingsOpen(false);
         setIsShortcutsOpen(false);
+        setIsUploadOpen(false);
       }
     };
 
@@ -237,284 +246,227 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 selection:bg-zinc-800 selection:text-zinc-100 overflow-hidden font-sans relative">
+    <div className="flex h-screen bg-slate-50 dark:bg-[#0b0d13] text-slate-900 dark:text-slate-100 overflow-hidden font-sans selection:bg-indigo-500/20">
       
       {/* 1. Left Sidebar Navigation */}
       <Sidebar
         schema={schema}
         health={health}
         onSelectQuery={handleSelectQuery}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onNewAnalysis={handleNewAnalysis}
         onOpenUpload={() => setIsUploadOpen(true)}
         history={queryHistory}
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
+        activeQuery={query}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
       />
 
       {/* 2. Main Studio Canvas */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden z-10">
         
-        {/* Top Bar with 3-Mode switcher */}
+        {/* Top Navigation Bar */}
         <TopBar
           health={health}
-          activeMode={activeMode}
-          setActiveMode={setActiveMode}
+          activeTitle={queryResult ? (queryResult.chart_spec.title || queryResult.user_query) : "Studio Analytics & Telemetry"}
+          theme={theme}
+          onToggleTheme={toggleTheme}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          latencyMs={queryResult?.execution_time_ms}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed(prev => !prev)}
+          onShare={() => {
+            navigator.clipboard.writeText(window.location.href);
+            showToast("Report URL copied to clipboard");
+          }}
+          onExport={queryResult ? () => {
+            const headers = queryResult.columns.join(',');
+            const csvRows = queryResult.rows.map(r =>
+              queryResult.columns.map(c => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(',')
+            );
+            const content = [headers, ...csvRows].join('\n');
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `omniquery_studio_${Date.now()}.csv`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            showToast(`Exported ${queryResult.rows.length} rows to CSV`);
+          } : undefined}
         />
 
-        {/* Scrollable Work Area */}
-        <main className="flex-1 overflow-y-auto p-5 max-w-6xl w-full mx-auto space-y-5">
-          
-          {/* Mode 1: AI Analyst */}
-          {activeMode === 'agent' && (
-            <>
-              {/* Command Bar Input */}
-              <div className="relative group">
-                <div className="relative bg-zinc-950 rounded-xl p-2.5 shadow-sm border border-zinc-800 focus-within:border-zinc-700 transition duration-200">
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleRunQuery();
-                    }}
-                    className="flex items-center gap-3"
-                  >
-                    <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 flex-shrink-0">
-                      <Sparkles className="h-4 w-4" />
-                    </div>
-                    
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Ask film studio intelligence (e.g. 'Box office gross by genre', 'p95 streaming latency', 'Pacing issues in reviews')..."
-                      disabled={isStreaming}
-                      className="w-full bg-transparent text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none font-mono tracking-wide"
-                    />
-
-                    {query && !isStreaming && (
-                      <button
-                        type="button"
-                        onClick={() => setQuery('')}
-                        className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400 font-mono shadow-inner">
-                        ⌘K
-                      </kbd>
-                      
-                      <button
-                        type="submit"
-                        disabled={isStreaming || !query.trim()}
-                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-zinc-100 hover:bg-white text-zinc-900 text-[11px] font-mono font-semibold transition-all duration-200 disabled:opacity-40 disabled:pointer-events-none"
-                      >
-                        <span>{isStreaming ? 'Synthesizing...' : 'Execute'}</span>
-                        <CornerDownLeft className="h-3 w-3 text-zinc-500" />
-                      </button>
-                    </div>
-                  </form>
+        {/* Scrollable Conversational Feed */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 flex flex-col items-center">
+          <div className="w-full max-w-3xl space-y-6">
+            
+            {/* User Inquiry Message */}
+            {(queryResult || isStreaming) && (
+              <div className="flex items-start gap-3.5 pb-2">
+                <div className="h-8 w-8 rounded-full bg-slate-900 dark:bg-slate-800 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
+                  DN
                 </div>
-              </div>
-
-              {/* Quick Presets Ribbon */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs no-scrollbar">
-                <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider flex items-center gap-1 flex-shrink-0 mr-1">
-                  <SlidersHorizontal className="h-3 w-3 text-zinc-600" />
-                  <span>Presets:</span>
-                </span>
-                {QUICK_PRESETS.map((preset, idx) => {
-                  const Icon = preset.icon;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleSelectQuery(preset.query)}
-                      disabled={isStreaming}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono whitespace-nowrap transition-all duration-150 ${preset.color}`}
-                    >
-                      <Icon className="h-3 w-3" />
-                      <span>{preset.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Error Banner */}
-              {error && (
-                <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-800/70 text-red-300 text-xs font-mono flex items-center gap-3 backdrop-blur-md shadow-lg shadow-red-950/20 animate-shake">
-                  <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
-                  <span className="flex-1">{error}</span>
-                </div>
-              )}
-
-              {/* Execution Trace Stream */}
-              <AgentTraceLog steps={steps} isStreaming={isStreaming} />
-
-              {/* Query Results & Workbench */}
-              {queryResult && (
-                <ResultsWorkbench
-                  payload={queryResult}
-                  onSelectFollowup={handleSelectQuery}
-                  isLoading={isStreaming}
-                  onShowToast={showToast}
-                />
-              )}
-
-              {/* Empty State */}
-              {!queryResult && steps.length === 0 && !isStreaming && (
-                <div className="py-8 space-y-6">
-                  
-                  {/* Header */}
-                  <div className="relative rounded-2xl bg-zinc-950 border border-zinc-800 p-8 text-center overflow-hidden">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 text-[11px] font-mono mb-4">
-                      <span className="h-2 w-2 rounded-full bg-zinc-500" />
-                      <span>SYSTEM READY</span>
-                    </div>
-
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white mb-2 font-sans">
-                      OmniQuery Analytics
-                    </h2>
-                    
-                    <p className="text-xs sm:text-sm text-zinc-400 max-w-2xl mx-auto leading-relaxed mb-6 font-sans">
-                      Autonomous NL-to-SQL synthesis & vector similarity querying powered by ClickHouse columnar OLAP across 50,000 film studio financial records, CDN stream metrics, and audience sentiments.
-                    </p>
-
-                    {/* Telemetry Status Ticker */}
-                    <div className="flex flex-wrap items-center justify-center gap-3 text-[10px] font-mono text-zinc-400">
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">
-                        <Database className="h-3 w-3 text-zinc-400" />
-                        <span>50,000 Records Seeded</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">
-                        <Zap className="h-3 w-3 text-zinc-400" />
-                        <span>Sub-5ms Execution Latency</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">
-                        <BrainCircuit className="h-3 w-3 text-zinc-400" />
-                        <span>Gemini 2.5 Pipeline</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800">
-                        <Activity className="h-3 w-3 text-zinc-400" />
-                        <span>SQL Engine</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 3 Interactive Launch Deck Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    
-                    {/* Card 1 */}
-                    <div 
-                      onClick={() => handleSelectQuery("Total gross revenue and average opening weekend by genre")}
-                      className="group bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 cursor-pointer transition-colors flex flex-col justify-between"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center justify-center group-hover:text-zinc-200 transition-colors">
-                            <Film className="h-4 w-4" />
-                          </div>
-                          <span className="text-[10px] font-mono text-zinc-500 uppercase">50k Movies</span>
-                        </div>
-                        <h4 className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">
-                          Box Office & Financial ROI
-                        </h4>
-                        <p className="text-[11px] text-zinc-400 leading-normal">
-                          Explore worldwide gross revenue, opening multipliers, and net profits categorized by film genre and studio distributor.
-                        </p>
-                      </div>
-                      <div className="pt-3 flex items-center justify-between text-[10px] font-mono text-zinc-500 group-hover:text-zinc-300 transition-colors">
-                        <span>Launch Analytics</span>
-                        <ChevronRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </div>
-
-                    {/* Card 2 */}
-                    <div 
-                      onClick={() => handleSelectQuery("95th percentile streaming CDN latency per service")}
-                      className="group bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 cursor-pointer transition-colors flex flex-col justify-between"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center justify-center group-hover:text-zinc-200 transition-colors">
-                            <Activity className="h-4 w-4" />
-                          </div>
-                          <span className="text-[10px] font-mono text-zinc-500 uppercase">75k Telemetry Logs</span>
-                        </div>
-                        <h4 className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">
-                          Streaming CDN Infrastructure
-                        </h4>
-                        <p className="text-[11px] text-zinc-400 leading-normal">
-                          Aggregate p95/p99 streaming edge latency, 4K bitrate consumption, and HTTP 5xx error spikes per distribution node.
-                        </p>
-                      </div>
-                      <div className="pt-3 flex items-center justify-between text-[10px] font-mono text-zinc-500 group-hover:text-zinc-300 transition-colors">
-                        <span>Inspect Stream Health</span>
-                        <ChevronRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </div>
-
-                    {/* Card 3 */}
-                    <div 
-                      onClick={() => handleSelectQuery("Find audience reviews complaining about pacing issues using semantic search")}
-                      className="group bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl p-4 cursor-pointer transition-colors flex flex-col justify-between"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="h-8 w-8 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center justify-center group-hover:text-zinc-200 transition-colors">
-                            <BrainCircuit className="h-4 w-4" />
-                          </div>
-                          <span className="text-[10px] font-mono text-zinc-500 uppercase">15k Embeddings</span>
-                        </div>
-                        <h4 className="text-xs font-bold text-zinc-200 group-hover:text-white transition-colors">
-                          Vector Semantic Search
-                        </h4>
-                        <p className="text-[11px] text-zinc-400 leading-normal">
-                          Run 16-dimensional cosine vector similarity against audience feedback to isolate screenplay pacing and CGI critique.
-                        </p>
-                      </div>
-                      <div className="pt-3 flex items-center justify-between text-[10px] font-mono text-zinc-500 group-hover:text-zinc-300 transition-colors">
-                        <span>Scan Vector Radar</span>
-                        <ChevronRight className="h-3 w-3 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </div>
-
+                <div className="flex-1 pt-0.5">
+                  <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-1">You</div>
+                  <div className="text-base text-slate-900 dark:text-white font-semibold leading-relaxed">
+                    {query || queryResult?.user_query}
                   </div>
                 </div>
-              )}
-            </>
-          )}
+              </div>
+            )}
 
-          {/* Mode 2: Raw SQL Studio */}
-          {activeMode === 'sql' && (
-            <SqlPlayground onExecuteRawSql={handleExecuteRawSql} />
-          )}
+            {/* Error Banner */}
+            {error && (
+              <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-3">
+                <AlertCircle className="h-4 w-4 text-rose-500 flex-shrink-0" />
+                <span className="flex-1 font-medium">{error}</span>
+              </div>
+            )}
 
-          {/* Mode 3: Live Telemetry Monitor */}
-          {activeMode === 'monitor' && (
-            <LiveMonitor onExecuteSql={handleExecuteRawSql} />
-          )}
+            {/* Execution Trace Stream */}
+            <AgentTraceLog steps={steps} isStreaming={isStreaming} />
 
+            {/* Query Results & Executive Memo */}
+            {queryResult && (
+              <ResultsWorkbench
+                payload={queryResult}
+                onSelectFollowup={handleSelectQuery}
+                isLoading={isStreaming}
+                onShowToast={showToast}
+              />
+            )}
+
+            {/* Empty State / Welcome Screen */}
+            {!queryResult && steps.length === 0 && !isStreaming && (
+              <div className="py-8 space-y-8 animate-fadeIn">
+                
+                {/* Header Welcome */}
+                <div className="text-center space-y-3">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 text-xs font-medium border border-slate-200 dark:border-slate-700">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>ClickHouse GCP • 30k Live Records</span>
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
+                    OmniQuery Studio
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
+                    Instant natural language intelligence across theatrical box office returns, streaming CDN QoS telemetry, and audience sentiment.
+                  </p>
+                </div>
+
+                {/* 3 Curated Prompt Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  {CURATED_PROMPTS.map((item, idx) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={idx}
+                        onClick={() => handleSelectQuery(item.query)}
+                        className="text-left p-4 rounded-2xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/60 shadow-2xs transition-all flex flex-col justify-between group"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                              {item.metric}
+                            </span>
+                          </div>
+                          <h3 className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {item.title}
+                          </h3>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        <div className="pt-3 flex items-center justify-between text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform">
+                          <span>Explore</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+              </div>
+            )}
+
+          </div>
         </main>
+
+        {/* 3. Bottom Input Dock (Linear / Julius Style) */}
+        <footer className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#0f1118]/90 backdrop-blur-md flex-shrink-0 flex justify-center">
+          <div className="w-full max-w-3xl">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleRunQuery();
+              }}
+              className="relative rounded-2xl border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-[#161822] shadow-xs focus-within:border-slate-900 dark:focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-900 dark:focus-within:ring-slate-400 transition-all p-1.5 sm:p-2 flex items-center gap-2"
+            >
+              <button
+                type="button"
+                onClick={() => setIsUploadOpen(true)}
+                title="Upload custom dataset"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Upload className="h-4 w-4" />
+              </button>
+
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Ask about theatrical revenue, streaming QoS, or audience feedback..."
+                disabled={isStreaming}
+                className="flex-1 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 bg-transparent focus:outline-none px-1"
+              />
+
+              {query && !isStreaming && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                <span>Gemini 3.6 Flash</span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isStreaming || !query.trim()}
+                className="h-8 w-8 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-30 disabled:pointer-events-none flex-shrink-0 shadow-2xs"
+              >
+                <CornerDownLeft className="h-3.5 w-3.5" />
+              </button>
+            </form>
+
+            <div className="flex items-center justify-between px-2 pt-1.5 text-[10px] text-slate-400 dark:text-slate-500">
+              <span>Connected to ClickHouse Cloud on GCP</span>
+              <span className="hidden sm:inline">Press <kbd className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-slate-500 dark:text-slate-400">↵ Return</kbd> to analyze</span>
+            </div>
+          </div>
+        </footer>
+
       </div>
 
-      {/* Settings Modal */}
+      {/* Modals & Dialogs */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSave={() => fetchHealthAndSchema()}
       />
 
-      {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
       />
 
-      {/* Custom Dataset Upload Modal */}
       <UploadDatasetModal
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
@@ -532,4 +484,5 @@ export const App: React.FC = () => {
 };
 
 export default App;
+
 

@@ -57,3 +57,5 @@ export interface SchemaResponse {
   is_cloud_clickhouse: boolean;
   tables: Record<string, TableInfo>;
 }
+
+export type ThemeMode = 'light' | 'dark';

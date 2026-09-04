@@ -1,8 +1,12 @@
 # OmniQuery AI
 
-**Autonomous natural language analytics for film studios, powered by Google ADK, Gemini, and the official ClickHouse MCP Server.**
+[![Live App](https://img.shields.io/badge/Live_App-omni--query--ai.vercel.app-6366f1?style=for-the-badge&logo=vercel)](https://omni-query-ai.vercel.app/)
+[![ClickHouse Track](https://img.shields.io/badge/Hackathon_Track-ClickHouse_MCP-FAD000?style=for-the-badge&logo=clickhouse&logoColor=black)](https://agentic-cinema.devpost.com/)
+[![Backend Status](https://img.shields.io/badge/Render_API-Live_%26_Healthy-10b981?style=for-the-badge&logo=render)](https://omniquery-ai-gfq3.onrender.com/api/health)
 
-OmniQuery AI translates natural language questions from studio executives and analysts into optimized ClickHouse SQL, executes queries across box office and streaming telemetry in sub-second time, self-heals syntax errors, and streams interactive visualizations directly to a React dashboard.
+**Autonomous conversational intelligence and analytics for film studios, powered by Google ADK, Gemini, and ClickHouse Cloud on GCP.**
+
+OmniQuery AI translates natural language questions from studio executives and analysts into optimized ClickHouse SQL, executes queries across box office and streaming telemetry in sub-second time, self-heals syntax errors, and streams interactive visualizations directly to a conversational React canvas.
 
 ---
 

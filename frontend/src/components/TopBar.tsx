@@ -1,105 +1,120 @@
 import React from 'react';
-import { Terminal, Sparkles, Settings, Cpu, Activity, Film } from 'lucide-react';
-import type { HealthResponse } from '../types';
+import { Settings, Sun, Moon, Menu, Share2, Download } from 'lucide-react';
+import type { HealthResponse, ThemeMode } from '../types';
 
 interface TopBarProps {
   health: HealthResponse | null;
-  activeMode: 'agent' | 'sql' | 'monitor';
-  setActiveMode: (mode: 'agent' | 'sql' | 'monitor') => void;
+  activeTitle?: string;
+  theme: ThemeMode;
+  onToggleTheme: () => void;
   onOpenSettings: () => void;
-  latencyMs?: number;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+  onShare?: () => void;
+  onExport?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
   health,
-  activeMode,
-  setActiveMode,
+  activeTitle = 'Studio Analytics & Telemetry',
+  theme,
+  onToggleTheme,
   onOpenSettings,
-  latencyMs
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+  onShare,
+  onExport
 }) => {
   return (
-    <header className="h-14 border-b border-zinc-800 bg-zinc-950 border-b border-zinc-800 px-4 flex items-center justify-between text-xs select-none sticky top-0 z-20 backdrop-blur-xl">
+    <header className="h-14 border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#0f1118]/90 px-4 sm:px-6 flex items-center justify-between text-xs select-none sticky top-0 z-20 backdrop-blur-md transition-colors">
       
-      {/* Breadcrumb path with studio branding */}
-      <div className="flex items-center gap-2 text-zinc-400 font-mono text-[11px]">
-        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-900/90 border border-zinc-800 text-zinc-300">
-          <Film className="h-3 w-3 text-amber-400" />
-          <span className="font-semibold text-white">STUDIO</span>
-        </div>
-        <span className="text-zinc-600">/</span>
-        <span className="text-zinc-400">clickhouse-cluster</span>
-        <span className="text-zinc-600">/</span>
-        <span className="text-cyan-400 font-semibold uppercase tracking-wider text-[10px]">
-          {activeMode === 'agent' ? 'AI-Analyst' : activeMode === 'sql' ? 'SQL-Studio' : 'Live-Telemetry'}
-        </span>
-      </div>
-
-      {/* Center 3-Mode Switcher */}
-      <div className="flex items-center bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 font-mono text-[11px] shadow-inner">
-        <button
-          onClick={() => setActiveMode('agent')}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
-            activeMode === 'agent'
-              ? 'bg-zinc-800 border border-zinc-700 text-zinc-100 font-bold shadow-sm'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-          title="Natural Language AI Analyst (⌘1)"
-        >
-          <Sparkles className="h-3.5 w-3.5 text-cyan-400" />
-          <span>AI Analyst</span>
-        </button>
-        <button
-          onClick={() => setActiveMode('sql')}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
-            activeMode === 'sql'
-              ? 'bg-zinc-800 border border-zinc-700 text-zinc-100 font-bold shadow-sm'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-          title="Raw ClickHouse SQL Editor (⌘2)"
-        >
-          <Terminal className="h-3.5 w-3.5 text-amber-400" />
-          <span>SQL Studio</span>
-        </button>
-        <button
-          onClick={() => setActiveMode('monitor')}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
-            activeMode === 'monitor'
-              ? 'bg-zinc-800 border border-zinc-700 text-zinc-100 font-bold shadow-sm'
-              : 'text-zinc-400 hover:text-zinc-200'
-          }`}
-          title="Real-Time Streaming & Studio Monitor (⌘3)"
-        >
-          <Activity className="h-3.5 w-3.5 text-emerald-400" />
-          <span>Live Telemetry</span>
-        </button>
-      </div>
-
-      {/* Right Controls & Telemetry */}
-      <div className="flex items-center gap-2.5 font-mono text-[11px]">
-        {latencyMs !== undefined && (
-          <div className="flex items-center gap-1.5 text-emerald-400 bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-800/40 shadow-sm">
-            <Cpu className="h-3 w-3" />
-            <span className="font-bold">{latencyMs}ms</span>
-          </div>
+      {/* Left: Sidebar Toggle & Title */}
+      <div className="flex items-center gap-3">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            aria-expanded={!isSidebarCollapsed}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            aria-label="Toggle navigation sidebar"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
         )}
 
-        <div className="flex items-center gap-2 text-zinc-300 bg-zinc-950/80 px-3 py-1 rounded-lg border border-zinc-800 shadow-sm">
-          <span className="relative flex h-2 w-2">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-slate-900 dark:text-white font-semibold text-xs sm:text-sm tracking-tight">
+            <span className="truncate max-w-[200px] sm:max-w-[360px]">{activeTitle}</span>
+          </div>
+          <span className="text-slate-300 dark:text-slate-700 hidden sm:inline">•</span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">ClickHouse Cloud</span>
+        </div>
+      </div>
+
+      {/* Right Controls */}
+      <div className="flex items-center gap-2 sm:gap-2.5">
+        
+        {/* Cluster Status Pill */}
+        <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-full border border-slate-200/80 dark:border-slate-700/60">
+          <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
           </span>
-          <span className="text-[10px] uppercase tracking-wider">{health?.database_mode ? "ClickHouse Columnar" : "Connecting..."}</span>
+          <span className="truncate max-w-[140px]">
+            {health?.database_mode ? (health.is_cloud_clickhouse ? 'ClickHouse GCP' : 'DuckDB Fallback') : 'Connecting...'}
+          </span>
         </div>
 
+        {/* Share Button */}
+        {onShare && (
+          <button
+            onClick={onShare}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Share report link"
+          >
+            <Share2 className="h-3 w-3" />
+            <span>Share</span>
+          </button>
+        )}
+
+        {/* Export Button */}
+        {onExport && (
+          <button
+            onClick={onExport}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-800 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="Export query data"
+          >
+            <Download className="h-3 w-3" />
+            <span>Export</span>
+          </button>
+        )}
+
+        {/* Theme Toggle (Sun / Moon) */}
+        <button
+          onClick={onToggleTheme}
+          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          aria-label="Toggle color theme"
+        >
+          {theme === 'dark' ? (
+            <Sun className="h-4 w-4 text-amber-400" />
+          ) : (
+            <Moon className="h-4 w-4 text-slate-600" />
+          )}
+        </button>
+
+        {/* Settings Button */}
         <button
           onClick={onOpenSettings}
-          className="p-1.5 rounded-lg bg-zinc-950/80 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800 transition-all shadow-sm"
-          title="Configure API Keys & Endpoints"
+          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          title="Configure API Keys & Settings"
+          aria-label="Settings"
         >
-          <Settings className="h-3.5 w-3.5" />
+          <Settings className="h-4 w-4" />
         </button>
       </div>
     </header>
   );
 };
+
 
