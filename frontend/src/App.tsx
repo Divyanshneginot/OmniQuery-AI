@@ -52,10 +52,11 @@ export const App: React.FC = () => {
   const [schema, setSchema] = useState<SchemaResponse | null>(null);
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isWarmingUp, setIsWarmingUp] = useState(false);
   const [queryResult, setQueryResult] = useState<QueryResultPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [queryHistory, setQueryHistory] = useState<string[]>([
-    'Which movie genre yielded the highest net profit across European screens in Q2?',
+    'Which movie genres yielded the highest net profit across European screens in Q2?',
     'Show me 95th percentile streaming latency and error counts per service endpoint.',
     'Find audience reviews complaining about pacing issues using semantic search.'
   ]);
@@ -108,15 +109,25 @@ export const App: React.FC = () => {
         fetch(`${API_BASE_URL}/health`),
         fetch(`${API_BASE_URL}/schema`)
       ]);
-      if (healthRes.ok) setHealth(await healthRes.json());
+      if (healthRes.ok) {
+        setHealth(await healthRes.json());
+        setIsWarmingUp(false);
+      } else {
+        setIsWarmingUp(true);
+      }
       if (schemaRes.ok) setSchema(await schemaRes.json());
     } catch {
-      console.warn('Backend offline or initializing...');
+      setIsWarmingUp(true);
+      console.warn('Backend offline or warming up from sleep...');
     }
   }, []);
 
   useEffect(() => {
     fetchHealthAndSchema();
+    const timer = setInterval(() => {
+      fetchHealthAndSchema();
+    }, 8000);
+    return () => clearInterval(timer);
   }, [fetchHealthAndSchema]);
 
   const handleRunQuery = async (targetQuery?: string) => {
@@ -270,6 +281,7 @@ export const App: React.FC = () => {
         {/* Top Navigation Bar */}
         <TopBar
           health={health}
+          isWarmingUp={isWarmingUp}
           activeTitle={queryResult ? (queryResult.chart_spec.title || queryResult.user_query) : "Studio Analytics & Telemetry"}
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -300,6 +312,21 @@ export const App: React.FC = () => {
         {/* Scrollable Conversational Feed */}
         <main ref={mainRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 flex flex-col items-center">
           <div className="w-full max-w-3xl space-y-6">
+            
+            {/* Warming Up Notice */}
+            {isWarmingUp && !health && (
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-2 w-2 flex-shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                  </span>
+                  <span>
+                    <strong>Cloud Instance Warming Up:</strong> Render free tier instance is waking up (~30s). Live queries will execute smoothly as soon as connected.
+                  </span>
+                </div>
+              </div>
+            )}
             
             {/* User Inquiry Message */}
             {(queryResult || isStreaming) && (

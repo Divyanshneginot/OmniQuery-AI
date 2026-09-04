@@ -4,6 +4,7 @@ import type { HealthResponse, ThemeMode } from '../types';
 
 interface TopBarProps {
   health: HealthResponse | null;
+  isWarmingUp?: boolean;
   activeTitle?: string;
   theme: ThemeMode;
   onToggleTheme: () => void;
@@ -16,6 +17,7 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({
   health,
+  isWarmingUp = false,
   activeTitle = 'Studio Analytics & Telemetry',
   theme,
   onToggleTheme,
@@ -57,11 +59,13 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Cluster Status Pill */}
         <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-medium text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/60 px-2.5 py-1 rounded-full border border-slate-200/80 dark:border-slate-700/60">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${health?.database_mode ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${health?.database_mode ? 'bg-emerald-500' : 'bg-amber-500'}`} />
           </span>
-          <span className="truncate max-w-[140px]">
-            {health?.database_mode ? (health.is_cloud_clickhouse ? 'ClickHouse GCP' : 'DuckDB Fallback') : 'Connecting...'}
+          <span className="truncate max-w-[150px]">
+            {health?.database_mode 
+              ? (health.is_cloud_clickhouse ? 'ClickHouse GCP' : 'DuckDB Fallback') 
+              : (isWarmingUp ? 'Waking Up Cloud...' : 'Connecting...')}
           </span>
         </div>
 

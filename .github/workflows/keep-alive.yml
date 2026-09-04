@@ -1,0 +1,22 @@
+﻿name: Render Cloud Keep-Alive
+
+on:
+  schedule:
+    # Ping every 10 minutes to prevent Render free tier spin-down (inactivity timeout is 15 minutes)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping OmniQuery AI Cloud Backend
+        run: |
+          echo "Pinging OmniQuery Render backend to keep instance warm and active..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://omniquery-ai-gfq3.onrender.com/api/health)
+          echo "Render Backend Health HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "OmniQuery backend is healthy and warm."
+          else
+            echo "OmniQuery backend responded with HTTP $HTTP_STATUS (waking up)."
+          fi
