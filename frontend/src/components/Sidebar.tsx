@@ -35,7 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       label: 'CDN Streaming Latency (p95)',
-      query: 'Show me 95th percentile streaming latency and error counts per service endpoint.',
+      query: 'Show me 95th percentile streaming latency using quantileExact(0.95) and error counts per service endpoint.',
       icon: Activity
     },
     {

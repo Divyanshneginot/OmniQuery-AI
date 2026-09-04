@@ -248,6 +248,7 @@ class AgentOrchestrator:
         while attempt < max_retries:
             try:
                 attempt += 1
+                current_sql = db_engine._map_duckdb_syntax_to_clickhouse(current_sql)
                 query_result = db_engine.execute_query(current_sql)
                 execution_error = None
                 break
@@ -302,6 +303,7 @@ class AgentOrchestrator:
             logger.info("Self-healing attempts exhausted. Attempting deterministic analytical query fallback...")
             try:
                 fallback_sql = self._generate_rule_based_sql(user_query)
+                fallback_sql = db_engine._map_duckdb_syntax_to_clickhouse(fallback_sql)
                 query_result = db_engine.execute_query(fallback_sql)
                 current_sql = fallback_sql
                 execution_error = None

@@ -328,10 +328,12 @@ class DatabaseEngine:
         """Helper to ensure standard SQL / DuckDB functions execute transparently on ClickHouse Cloud."""
         import re
         s = sql
-        # quantile_cont(P)(col) -> quantileExact(P)(col)
-        s = re.sub(r'quantile_cont\s*\(\s*([0-9.]+)\s*\)\s*\(\s*([^)]+)\s*\)', r'quantileExact(\1)(\2)', s)
-        # quantile_cont(col, P) -> quantileExact(P)(col)
-        s = re.sub(r'quantile_cont\s*\(\s*([^,]+)\s*,\s*([0-9.]+)\s*\)', r'quantileExact(\2)(\1)', s)
+        # quantile_cont(P)(col) or quantile(P)(col) or percentile_cont(P)(col) -> quantileExact(P)(col)
+        s = re.sub(r'(?:quantile_cont|quantile|percentile_cont)\s*\(\s*([0-9.]+)\s*\)\s*\(\s*([^)]+)\s*\)', r'quantileExact(\1)(\2)', s, flags=re.IGNORECASE)
+        # quantile_cont(col, P) or percentile_approx(col, P) or approx_percentile(col, P) -> quantileExact(P)(col)
+        s = re.sub(r'(?:quantile_cont|percentile_approx|approx_percentile)\s*\(\s*([^,]+)\s*,\s*([0-9.]+)\s*\)', r'quantileExact(\2)(\1)', s, flags=re.IGNORECASE)
+        # quantile_cont(P, col) -> quantileExact(P)(col)
+        s = re.sub(r'quantile_cont\s*\(\s*([0-9.]+)\s*,\s*([^)]+)\s*\)', r'quantileExact(\1)(\2)', s, flags=re.IGNORECASE)
         # percentile_cont(P) WITHIN GROUP (ORDER BY col) -> quantileExact(P)(col)
         s = re.sub(r'percentile_cont\s*\(\s*([0-9.]+)\s*\)\s*WITHIN\s+GROUP\s*\(\s*ORDER\s+BY\s+([^)]+)\s*\)', r'quantileExact(\1)(\2)', s, flags=re.IGNORECASE)
         return s

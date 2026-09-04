@@ -54,7 +54,12 @@ A previously generated ClickHouse SQL query failed with a database runtime error
 ### INSTRUCTIONS:
 1. Identify the exact issue (e.g., misspelled column, incompatible data type, missing GROUP BY key, invalid ClickHouse function).
 2. Fix the query to satisfy the original user intent while strictly adhering to the schema.
-3. Return ONLY the repaired SQL query inside a ```sql ... ``` markdown code block.
+3. CLICKHOUSE SYNTAX RULES (CRITICAL):
+   - In ClickHouse, NEVER use DuckDB/Postgres functions like `quantile_cont` or `percentile_cont`.
+   - ALWAYS use `quantileExact(0.95)(column)` or `quantile(0.95)(column)` for percentiles (e.g. `quantileExact(0.95)(latency_ms)`).
+   - For distinct count: use `uniqExact(column)` or `count(DISTINCT column)`.
+   - For vector distance: use `cosineDistance(embedding, target_vector)`.
+4. Return ONLY the repaired SQL query inside a ```sql ... ``` markdown code block.
 
 Repaired SQL:"""
 
