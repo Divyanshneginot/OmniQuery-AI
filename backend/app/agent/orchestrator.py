@@ -248,13 +248,6 @@ class AgentOrchestrator:
         while attempt < max_retries:
             try:
                 attempt += 1
-                if mcp_client.mcp_url:
-                    try:
-                        mcp_run_res = await mcp_client.call_mcp_tool("run_query", {"query": current_sql})
-                        if mcp_run_res:
-                            logger.info("Successfully executed query via ClickHouse MCP tool: run_query")
-                    except Exception as me:
-                        logger.debug(f"MCP run_query fallback: {me}")
                 query_result = db_engine.execute_query(current_sql)
                 execution_error = None
                 break

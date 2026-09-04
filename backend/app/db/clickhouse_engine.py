@@ -39,7 +39,8 @@ class DatabaseEngine:
                     username=ch_user,
                     password=ch_pass,
                     database=ch_db,
-                    secure=ch_secure
+                    secure=ch_secure,
+                    autogenerate_session_id=False
                 )
                 self.is_cloud_clickhouse = True
                 self.mode = f"ClickHouse Cloud ({ch_host})"
@@ -211,21 +212,22 @@ class DatabaseEngine:
         """Returns schemas and column metadata for all tables including uploaded datasets."""
         tables_info = {}
         if self.is_cloud_clickhouse and self.client:
-            tables = self.client.command("SHOW TABLES").split("\n")
-            for table in tables:
-                table = table.strip()
-                if not table: continue
-                try:
-                    cols_df = self.client.query_df(f"DESCRIBE TABLE {table}")
-                    sample_df = self.client.query_df(f"SELECT * FROM {table} LIMIT 3")
-                    import json
-                    tables_info[table] = {
-                        "columns": json.loads(cols_df.to_json(orient="records")),
-                        "sample_rows": json.loads(sample_df.to_json(orient="records")),
-                        "row_count": int(self.client.command(f"SELECT count() FROM {table}"))
-                    }
-                except Exception as e:
-                    logger.warning(f"Failed to inspect cloud table {table}: {e}")
+            with self._lock:
+                tables = self.client.command("SHOW TABLES").split("\n")
+                for table in tables:
+                    table = table.strip()
+                    if not table: continue
+                    try:
+                        cols_df = self.client.query_df(f"DESCRIBE TABLE {table}")
+                        sample_df = self.client.query_df(f"SELECT * FROM {table} LIMIT 3")
+                        import json
+                        tables_info[table] = {
+                            "columns": json.loads(cols_df.to_json(orient="records")),
+                            "sample_rows": json.loads(sample_df.to_json(orient="records")),
+                            "row_count": int(self.client.command(f"SELECT count() FROM {table}"))
+                        }
+                    except Exception as e:
+                        logger.warning(f"Failed to inspect cloud table {table}: {e}")
         else:
             # Query duckdb internal tables
             tables_res = self.duck_conn.execute("SHOW TABLES;").fetchall()
