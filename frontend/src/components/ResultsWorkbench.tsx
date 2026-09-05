@@ -69,6 +69,21 @@ const getYAxisFormatter = (keys: string[]) => {
   };
 };
 
+const getSingleAxisFormatter = (key: string) => {
+  const isCurrency = /revenue|profit|gross|budget|spend|cost|amount/i.test(key);
+  const isTime = /latency|ms|duration/i.test(key);
+  const isPct = /pct|percent|rate/i.test(key);
+
+  return (val: number | string) => {
+    const num = Number(val);
+    if (isNaN(num) || num === 0) return String(val);
+    if (isCurrency) return currencyFmt.format(num);
+    if (isTime) return `${num} ms`;
+    if (isPct) return `${num.toFixed(1)}%`;
+    return compactFmt.format(num);
+  };
+};
+
 const formatXAxisTick = (val: unknown) => {
   const s = String(val ?? '');
   const stripped = s.replace(/^\/(api|stream)\/v\d+\//, '/');
@@ -143,6 +158,18 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
   }, [chart_spec.y_axis_keys, columns]);
 
   const yAxisFormatter = useMemo(() => getYAxisFormatter(yKeys), [yKeys]);
+
+  const hasDualAxis = useMemo(() => {
+    if (yKeys.length !== 2) return false;
+    const isTime0 = /latency|ms|duration/i.test(yKeys[0]);
+    const isTime1 = /latency|ms|duration/i.test(yKeys[1]);
+    const isCurr0 = /revenue|profit|gross|budget|spend|cost|amount/i.test(yKeys[0]);
+    const isCurr1 = /revenue|profit|gross|budget|spend|cost|amount/i.test(yKeys[1]);
+    return (isTime0 !== isTime1) || (isCurr0 !== isCurr1);
+  }, [yKeys]);
+
+  const leftAxisFormatter = useMemo(() => getSingleAxisFormatter(yKeys[0] || ''), [yKeys]);
+  const rightAxisFormatter = useMemo(() => getSingleAxisFormatter(yKeys[1] || ''), [yKeys]);
 
   const displayMetrics = useMemo(() => {
     const list = [...(chart_spec.key_metrics || [])];
@@ -237,15 +264,23 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 40 }}>
+            <LineChart data={rows} margin={{ top: 15, right: hasDualAxis ? 25 : 15, left: 10, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
               <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={formatXAxisTick} angle={-25} textAnchor="end" interval={0} height={55} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
+              {hasDualAxis ? (
+                <>
+                  <YAxis yAxisId="left" orientation="left" stroke={PALETTE[0]} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={leftAxisFormatter} width={58} />
+                  <YAxis yAxisId="right" orientation="right" stroke={PALETTE[1]} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={rightAxisFormatter} width={58} />
+                </>
+              ) : (
+                <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
+              )}
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Line
                   key={k}
+                  yAxisId={hasDualAxis ? (i === 0 ? 'left' : 'right') : undefined}
                   type="monotone"
                   dataKey={k}
                   name={chart_spec.series_names?.[i] || k.replace(/_/g, ' ').toUpperCase()}
@@ -262,7 +297,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       case 'area':
         return (
           <ResponsiveContainer width="100%" height={320}>
-            <AreaChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 40 }}>
+            <AreaChart data={rows} margin={{ top: 15, right: hasDualAxis ? 25 : 15, left: 10, bottom: 40 }}>
               <defs>
                 {yKeys.map((k, i) => (
                   <linearGradient key={k} id={`grad-${k}`} x1="0" y1="0" x2="0" y2="1">
@@ -273,12 +308,20 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
               <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={formatXAxisTick} angle={-25} textAnchor="end" interval={0} height={55} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
+              {hasDualAxis ? (
+                <>
+                  <YAxis yAxisId="left" orientation="left" stroke={PALETTE[0]} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={leftAxisFormatter} width={58} />
+                  <YAxis yAxisId="right" orientation="right" stroke={PALETTE[1]} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={rightAxisFormatter} width={58} />
+                </>
+              ) : (
+                <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
+              )}
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Area
                   key={k}
+                  yAxisId={hasDualAxis ? (i === 0 ? 'left' : 'right') : undefined}
                   type="monotone"
                   dataKey={k}
                   name={chart_spec.series_names?.[i] || k.replace(/_/g, ' ').toUpperCase()}
@@ -322,15 +365,23 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       default:
         return (
           <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 40 }} barCategoryGap="20%">
+            <BarChart data={rows} margin={{ top: 15, right: hasDualAxis ? 25 : 15, left: 10, bottom: 40 }} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
               <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={formatXAxisTick} angle={-25} textAnchor="end" interval={0} height={55} />
-              <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
+              {hasDualAxis ? (
+                <>
+                  <YAxis yAxisId="left" orientation="left" stroke={PALETTE[0]} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={leftAxisFormatter} width={58} />
+                  <YAxis yAxisId="right" orientation="right" stroke={PALETTE[1]} tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={rightAxisFormatter} width={58} />
+                </>
+              ) : (
+                <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
+              )}
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Bar
                   key={k}
+                  yAxisId={hasDualAxis ? (i === 0 ? 'left' : 'right') : undefined}
                   dataKey={k}
                   name={chart_spec.series_names?.[i] || k.replace(/_/g, ' ').toUpperCase()}
                   fill={PALETTE[i % PALETTE.length]}
