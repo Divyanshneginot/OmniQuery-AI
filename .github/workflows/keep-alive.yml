@@ -1,4 +1,4 @@
-﻿name: Render Cloud Keep-Alive
+name: Render Cloud Keep-Alive
 
 on:
   schedule:
@@ -13,10 +13,12 @@ jobs:
       - name: Ping OmniQuery AI Cloud Backend
         run: |
           echo "Pinging OmniQuery Render backend to keep instance warm and active..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://omniquery-ai-gfq3.onrender.com/api/health)
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 --retry 2 --retry-delay 5 "https://omniquery-ai-gfq3.onrender.com/api/health" || echo "000")
           echo "Render Backend Health HTTP Status: $HTTP_STATUS"
-          if [ "$HTTP_STATUS" -eq 200 ]; then
+          if [ "$HTTP_STATUS" = "200" ]; then
             echo "OmniQuery backend is healthy and warm."
+          elif [ "$HTTP_STATUS" = "000" ]; then
+            echo "OmniQuery backend ping timed out, but wake-up request was dispatched to Render."
           else
             echo "OmniQuery backend responded with HTTP $HTTP_STATUS (waking up)."
           fi
