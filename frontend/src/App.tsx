@@ -8,7 +8,8 @@ import {
   ChevronRight,
   Upload,
   CornerDownLeft,
-  RotateCcw
+  RotateCcw,
+  Sparkles
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -356,12 +357,12 @@ export const App: React.FC = () => {
             {/* User Inquiry Message */}
             {(queryResult || isStreaming) && (
               <div className="flex items-start gap-3.5 pb-2">
-                <div className="h-8 w-8 rounded-full bg-slate-900 dark:bg-slate-800 text-white font-bold text-xs flex items-center justify-center flex-shrink-0">
-                  DN
+                <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <Sparkles className="h-4 w-4" />
                 </div>
                 <div className="flex-1 pt-0.5">
-                  <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mb-1">You</div>
-                  <div className="text-base text-slate-900 dark:text-white font-semibold leading-relaxed">
+                  <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">Executive Inquiry</div>
+                  <div className="text-base text-slate-900 dark:text-white font-medium leading-relaxed">
                     {query || queryResult?.user_query}
                   </div>
                 </div>

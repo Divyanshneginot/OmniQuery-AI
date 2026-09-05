@@ -402,20 +402,23 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
     <div className="space-y-5 animate-fadeIn">
       
       {chart_spec.executive_summary && (
-        <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-normal bg-slate-50 dark:bg-[#141620] p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
-          <p>{chart_spec.executive_summary}</p>
+        <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-normal bg-white dark:bg-[#141620] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-start gap-3">
+          <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <p className="flex-1">{chart_spec.executive_summary}</p>
         </div>
       )}
 
       {/* 3 Balanced Metric KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {displayMetrics.map((metric, idx) => (
-          <div key={idx} className="p-3.5 rounded-xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div key={idx} className="p-4 rounded-2xl bg-white dark:bg-[#141620] border border-slate-200/90 dark:border-slate-800/90 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-all shadow-xs group">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">{metric.label}</span>
+              <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{metric.label}</span>
               {renderTrendIcon(metric.trend)}
             </div>
-            <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">{metric.value}</div>
+            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1.5 tracking-tight">{metric.value}</div>
           </div>
         ))}
       </div>
