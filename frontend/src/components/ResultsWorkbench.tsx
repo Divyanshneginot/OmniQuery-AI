@@ -55,9 +55,9 @@ const formatNumericValue = (val: number, keyName: string) => {
 };
 
 const getYAxisFormatter = (keys: string[]) => {
-  const isCurrency = keys.some(k => /revenue|profit|gross|budget|spend|cost|amount/i.test(k));
-  const isTime = keys.some(k => /latency|ms|duration/i.test(k));
-  const isPct = keys.some(k => /pct|percent|rate/i.test(k));
+  const isCurrency = keys.length > 0 && keys.every(k => /revenue|profit|gross|budget|spend|cost|amount/i.test(k));
+  const isTime = keys.length > 0 && keys.every(k => /latency|ms|duration/i.test(k));
+  const isPct = keys.length > 0 && keys.every(k => /pct|percent|rate/i.test(k));
 
   return (val: number | string) => {
     const num = Number(val);
@@ -67,6 +67,12 @@ const getYAxisFormatter = (keys: string[]) => {
     if (isPct) return `${num.toFixed(1)}%`;
     return compactFmt.format(num);
   };
+};
+
+const formatXAxisTick = (val: unknown) => {
+  const s = String(val ?? '');
+  const stripped = s.replace(/^\/(api|stream)\/v\d+\//, '/');
+  return stripped.length > 20 ? stripped.slice(0, 18) + '…' : stripped;
 };
 
 interface TooltipEntry {
@@ -230,13 +236,13 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
     switch (chartType) {
       case 'line':
         return (
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <LineChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
-              <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={formatXAxisTick} angle={-25} textAnchor="end" interval={0} height={55} />
               <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
+              <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Line
                   key={k}
@@ -255,8 +261,8 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
 
       case 'area':
         return (
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 40 }}>
               <defs>
                 {yKeys.map((k, i) => (
                   <linearGradient key={k} id={`grad-${k}`} x1="0" y1="0" x2="0" y2="1">
@@ -266,10 +272,10 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                 ))}
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
-              <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={formatXAxisTick} angle={-25} textAnchor="end" interval={0} height={55} />
               <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
+              <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Area
                   key={k}
@@ -288,10 +294,10 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       case 'pie': {
         const pieSlice = rows.slice(0, 8);
         return (
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={320}>
             <PieChart margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
               <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
+              <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               <Pie
                 data={pieSlice}
                 dataKey={yKeys[0] || 'count'}
@@ -315,13 +321,13 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
       case 'bar':
       default:
         return (
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 15 }} barCategoryGap="20%">
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={rows} margin={{ top: 15, right: 20, left: 10, bottom: 40 }} barCategoryGap="20%">
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(150, 150, 150, 0.1)" />
-              <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} />
+              <XAxis dataKey={xKey} stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={formatXAxisTick} angle={-25} textAnchor="end" interval={0} height={55} />
               <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ paddingTop: 12, fontSize: '11px' }} />
+              <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Bar
                   key={k}
