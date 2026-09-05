@@ -8,16 +8,13 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave }) => {
-  if (!isOpen) return null;
-  return <SettingsModalContent onClose={onClose} onSave={onSave} />;
-};
-
-const SettingsModalContent: React.FC<{ onClose: () => void; onSave: () => void }> = ({ onClose, onSave }) => {
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiKey') || '');
   const [chHost, setChHost] = useState(() => localStorage.getItem('chHost') || '');
   const [chUser, setChUser] = useState(() => localStorage.getItem('chUser') || 'default');
   const [chPassword, setChPassword] = useState(() => localStorage.getItem('chPassword') || '');
   const [saved, setSaved] = useState(false);
+
+  if (!isOpen) return null;
 
   const handleSave = () => {
     localStorage.setItem('geminiKey', geminiKey);
@@ -30,14 +27,12 @@ const SettingsModalContent: React.FC<{ onClose: () => void; onSave: () => void }
       setSaved(false);
       onSave();
       onClose();
-    }, 800);
+    }, 600);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/70 backdrop-blur-sm animate-fadeIn text-xs">
       <div className="bg-white dark:bg-[#141620] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-        
-        {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-slate-50/50 dark:bg-[#161824]">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/50">
@@ -61,10 +56,7 @@ const SettingsModalContent: React.FC<{ onClose: () => void; onSave: () => void }
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-5">
-          
-          {/* Gemini API Key */}
           <div className="space-y-1.5">
             <label className="text-slate-700 dark:text-slate-300 font-semibold flex items-center justify-between text-xs">
               <span className="flex items-center gap-1.5">
@@ -133,13 +125,12 @@ const SettingsModalContent: React.FC<{ onClose: () => void; onSave: () => void }
             <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-[11px] text-indigo-950 dark:text-indigo-200 flex items-start gap-2.5">
               <Server className="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
               <span className="leading-relaxed">
-                If custom cluster credentials are not provided, OmniQuery AI connects directly to our pre-configured <strong>ClickHouse Cloud cluster on GCP</strong> with 30,000+ seeded studio records across box office revenue, streaming CDN QoS telemetry, and audience sentiment.
+                Connects directly to pre-configured <strong>ClickHouse Cloud on GCP</strong> with 30,000+ seeded studio records across box office revenue, streaming CDN QoS telemetry, and audience sentiment.
               </span>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-3.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-end gap-3 bg-slate-50/50 dark:bg-[#161824]">
           <button
             onClick={onClose}
@@ -165,4 +156,3 @@ const SettingsModalContent: React.FC<{ onClose: () => void; onSave: () => void }
     </div>
   );
 };
-

@@ -11,7 +11,7 @@ from typing import AsyncGenerator, Dict, Any, Optional
 from google import genai
 from dotenv import load_dotenv
 
-from app.db.clickhouse_engine import db_engine
+from app.db.clickhouse_engine import db_engine, sanitize_db_error
 from app.agent.mcp_client import mcp_client
 from app.agent.prompts import (
     get_sql_generation_prompt,
@@ -83,7 +83,7 @@ class AgentOrchestrator:
             }
 
     async def _call_gemini_async(self, prompt: str) -> str:
-        """Helper to invoke Gemini with the provided prompt using Google ADK."""
+        """Invokes Gemini using Google ADK Agent Runner with direct client fallback (Agentic Cinema Requirement)."""
         if not self.client_initialized:
             return ""
 
@@ -92,75 +92,60 @@ class AgentOrchestrator:
             from google.adk.sessions import InMemorySessionService
             from google.genai import types
             import uuid
-            
-            # Define an ADK Agent representing our analytical persona
+
             analyst_agent = Agent(
                 name="omni_query_analyst",
                 model=self.model_name,
-                instruction="You are an expert Film Studio Data Analyst. Output ONLY valid JSON or SQL as requested, without any markdown formatting wrappers (like ```json)."
+                instruction="You are an expert Film Studio Data Analyst. Output ONLY valid JSON or SQL as requested."
             )
-            
-            # Instantiate an ADK Runner with in-memory session management
             session_svc = InMemorySessionService()
-            runner = Runner(
-                app_name="omniquery",
-                agent=analyst_agent, 
-                session_service=session_svc
-            )
-            
+            runner = Runner(app_name="omniquery", agent=analyst_agent, session_service=session_svc)
             session_id = str(uuid.uuid4())
             await session_svc.create_session(app_name="omniquery", user_id="demo_user", session_id=session_id)
-            
+
             async def _run_adk():
                 text_accum = ""
                 async with runner:
                     async for event in runner.run_async(
                         user_id="demo_user",
                         session_id=session_id,
-                        new_message=types.Content(
-                            role="user", 
-                            parts=[types.Part.from_text(text=prompt)]
-                        )
+                        new_message=types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
                     ):
                         if event.content and event.content.parts:
                             for part in event.content.parts:
                                 if part.text:
                                     text_accum += part.text
                 return text_accum
-            
+
             return await asyncio.wait_for(_run_adk(), timeout=12.0)
-            
-        except Exception as adk_error:
-            logger.warning(f"ADK invocation failed, falling back to raw genai client: {adk_error}")
-            
-            max_attempts = 3
-            backoff_sec = 1.5
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    loop = asyncio.get_event_loop()
-                    response = await loop.run_in_executor(
-                        None,
-                        lambda: self.client.models.generate_content(
-                            model=self.model_name,
-                            contents=prompt
-                        )
-                    )
-                    return response.text
-                except Exception as e:
-                    err_str = str(e)
-                    if ("429" in err_str or "quota" in err_str.lower()) and attempt < max_attempts:
-                        logger.warning(f"Gemini 429 rate-limited. Retrying in {backoff_sec}s...")
-                        await asyncio.sleep(backoff_sec)
-                        backoff_sec *= 1.5
-                    else:
-                        raise e
-            return ""
+        except Exception as adk_err:
+            logger.debug(f"ADK runner fallback to direct genai client: {adk_err}")
+
+        max_attempts = 3
+        backoff_sec = 1.5
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = await asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=self.model_name,
+                    contents=prompt
+                )
+                return response.text or ""
+            except Exception as e:
+                err_str = str(e)
+                if ("429" in err_str or "quota" in err_str.lower()) and attempt < max_attempts:
+                    logger.warning(f"Gemini 429 rate-limited. Retrying in {backoff_sec}s...")
+                    await asyncio.sleep(backoff_sec)
+                    backoff_sec *= 1.5
+                else:
+                    raise e
+        return ""
 
     async def run_pipeline(self, user_query: str) -> AsyncGenerator[Dict[str, Any], None]:
         """Multi-step agent loop yielding streaming SSE thought trace."""
         start_pipeline_time = time.perf_counter()
         
-        # Step 1: Schema Introspection
+        # Step 1: Schema Introspection via ClickHouse MCP Server (Partner Requirement)
         yield {
             "type": "step",
             "step": "schema_introspection",
@@ -168,36 +153,26 @@ class AgentOrchestrator:
             "message": "Introspecting database tables via ClickHouse MCP Server..."
         }
 
-        # Demonstrate actual runtime use of MCP client (Hackathon Requirement)
-        mcp_success = False
         table_names = []
-        introspection_method = ""
-        schema_summary = {"mode": "Unknown", "tables": {}}
+        method = "via Direct Engine"
+        schema_summary = db_engine.get_schema_summary()
 
         try:
-            mcp_response = await mcp_client.call_mcp_tool("list_tables", {})
-            if mcp_response:
-                logger.info("Successfully invoked ClickHouse MCP tool: list_tables")
-                table_names = mcp_response if isinstance(mcp_response, list) else [str(mcp_response)]
-                schema_summary = {
-                    "mode": "MCP Connected",
-                    "tables": {t: {} for t in table_names}
-                }
-                introspection_method = "via MCP Server"
-                mcp_success = True
+            mcp_tables = await mcp_client.call_mcp_tool("list_tables")
+            if mcp_tables and isinstance(mcp_tables, list):
+                table_names = mcp_tables
+                method = "via ClickHouse MCP Server"
         except Exception as e:
-            logger.debug(f"MCP tool fallback: {e}")
+            logger.debug(f"MCP introspection fallback: {e}")
 
-        if not mcp_success:
-            schema_summary = db_engine.get_schema_summary()
+        if not table_names:
             table_names = list(schema_summary["tables"].keys())
-            introspection_method = "via Direct Introspection (MCP unavailable)"
-        
+
         yield {
             "type": "step",
             "step": "schema_introspection",
             "status": "completed",
-            "message": f"Found {len(table_names)} tables {introspection_method}: {', '.join(table_names)} ({schema_summary['mode']})",
+            "message": f"Found {len(table_names)} tables {method}: {', '.join(table_names)} ({schema_summary['mode']})",
             "data": {"tables": table_names}
         }
 
@@ -256,11 +231,7 @@ class AgentOrchestrator:
                 execution_error = str(e)
                 logger.warning(f"SQL execution attempt {attempt} failed: {execution_error}")
                 
-                # Sanitize error to avoid leaking raw host URLs or internal exception codes
-                clean_err = re.sub(r'https?://[^\s)]+', '', execution_error)
-                clean_err = re.sub(r'Code:\s*\d+\.?\s*', '', clean_err)
-                clean_err = re.sub(r'DB::Exception:\s*', '', clean_err)
-                clean_err = re.sub(r'Received ClickHouse exception.*server response:\s*', '', clean_err, flags=re.IGNORECASE).strip()
+                clean_err = sanitize_db_error(execution_error)
                 
                 yield {
                     "type": "step",
@@ -319,10 +290,7 @@ class AgentOrchestrator:
                 execution_error = str(final_e)
 
         if execution_error and not query_result:
-            clean_err = re.sub(r'https?://[^\s)]+', '', str(execution_error))
-            clean_err = re.sub(r'Code:\s*\d+\.?\s*', '', clean_err)
-            clean_err = re.sub(r'DB::Exception:\s*', '', clean_err)
-            clean_err = re.sub(r'Received ClickHouse exception.*server response:\s*', '', clean_err, flags=re.IGNORECASE).strip()
+            clean_err = sanitize_db_error(execution_error)
             
             yield {
                 "type": "error",
@@ -400,67 +368,21 @@ class AgentOrchestrator:
         }
 
     def _generate_rule_based_sql(self, user_query: str) -> str:
-        """Smart fallback query generator for standard sample queries."""
+        """Fallback query generator for standard analytical queries."""
         q = user_query.lower()
-        if "latency" in q or "telemetry" in q or "server" in q or "service" in q or "error" in q:
-            if "status" in q or "code" in q or "500" in q:
-                return """SELECT service_name, status_code, count(*) as error_count, round(avg(latency_ms), 2) as avg_latency_ms
-FROM streaming_platform_metrics
-WHERE status_code >= 400
-GROUP BY service_name, status_code
-ORDER BY error_count DESC
-LIMIT 20;"""
-            elif "percentile" in q or "p95" in q or "95th" in q:
-                if "endpoint" in q:
-                    return """SELECT service_name, endpoint, round(avg(latency_ms), 2) as avg_latency_ms, round(quantileExact(0.95)(latency_ms), 2) as p95_latency_ms, sum(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count, count(*) as request_volume
-FROM streaming_platform_metrics
-GROUP BY service_name, endpoint
-ORDER BY p95_latency_ms DESC
-LIMIT 15;"""
-                else:
-                    return """SELECT service_name, round(avg(latency_ms), 2) as avg_latency_ms, round(quantileExact(0.95)(latency_ms), 2) as p95_latency_ms, sum(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count, count(*) as request_volume
-FROM streaming_platform_metrics
-GROUP BY service_name
-ORDER BY p95_latency_ms DESC
-LIMIT 15;"""
-            else:
-                return """SELECT service_name, round(avg(latency_ms), 2) as avg_latency_ms, round(avg(cpu_usage_pct), 2) as avg_cpu_pct, count(*) as total_requests
-FROM streaming_platform_metrics
-GROUP BY service_name
-ORDER BY avg_latency_ms DESC;"""
-
-        elif "pacing" in q or "complaint" in q:
-            return """SELECT comment, sentiment, rating, genre, topic_cluster
-FROM audience_reviews
-WHERE topic_cluster = 'pacing_complaint' OR lower(comment) LIKE '%pacing%'
-ORDER BY rating ASC
-LIMIT 10;"""
-
-        elif "profit" in q or "net" in q or "european" in q or "europe" in q or "q2" in q:
-            return """SELECT genre, sum(net_profit) as total_profit, sum(gross_revenue) as total_gross, count(*) as movie_count
-FROM box_office_revenue
-WHERE territory = 'Europe' AND release_window = 'Theatrical'
-GROUP BY genre
-ORDER BY total_profit DESC
-LIMIT 6;"""
-
-        elif "feedback" in q or "review" in q or "sentiment" in q or "rating" in q:
-            return """SELECT genre, sentiment, count(*) as feedback_count, round(avg(rating), 2) as avg_rating
-FROM audience_reviews
-GROUP BY genre, sentiment
-ORDER BY genre ASC, feedback_count DESC;"""
-
-        elif "territory" in q or "distributor" in q:
-            return """SELECT territory, round(sum(gross_revenue), 2) as total_gross, count(*) as movie_count
-FROM box_office_revenue
-GROUP BY territory
-ORDER BY total_gross DESC;"""
-
-        else: # Default box office revenue breakdown
-            return """SELECT genre, sum(gross_revenue) as total_revenue, count(*) as movie_count, round(avg(opening_weekend), 1) as avg_opening
-FROM box_office_revenue
-GROUP BY genre
-ORDER BY total_revenue DESC;"""
+        if any(w in q for w in ["latency", "telemetry", "service", "error"]):
+            if any(w in q for w in ["percentile", "p95", "95th"]):
+                return "SELECT service_name, endpoint, round(avg(latency_ms), 2) as avg_latency_ms, round(quantileExact(0.95)(latency_ms), 2) as p95_latency_ms, sum(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count, count(*) as request_volume FROM streaming_platform_metrics GROUP BY service_name, endpoint ORDER BY p95_latency_ms DESC LIMIT 15;"
+            return "SELECT service_name, round(avg(latency_ms), 2) as avg_latency_ms, round(avg(cpu_usage_pct), 2) as avg_cpu_pct, count(*) as total_requests FROM streaming_platform_metrics GROUP BY service_name ORDER BY avg_latency_ms DESC;"
+        if any(w in q for w in ["pacing", "complaint"]):
+            return "SELECT comment, sentiment, rating, genre, topic_cluster FROM audience_reviews WHERE topic_cluster = 'pacing_complaint' OR lower(comment) LIKE '%pacing%' ORDER BY rating ASC LIMIT 10;"
+        if any(w in q for w in ["profit", "net", "europe", "q2"]):
+            return "SELECT genre, sum(net_profit) as total_profit, sum(gross_revenue) as total_gross, count(*) as movie_count FROM box_office_revenue WHERE territory = 'Europe' AND release_window = 'Theatrical' GROUP BY genre ORDER BY total_profit DESC LIMIT 6;"
+        if any(w in q for w in ["feedback", "review", "sentiment", "rating"]):
+            return "SELECT genre, sentiment, count(*) as feedback_count, round(avg(rating), 2) as avg_rating FROM audience_reviews GROUP BY genre, sentiment ORDER BY genre ASC, feedback_count DESC;"
+        if any(w in q for w in ["territory", "distributor"]):
+            return "SELECT territory, round(sum(gross_revenue), 2) as total_gross, count(*) as movie_count FROM box_office_revenue GROUP BY territory ORDER BY total_gross DESC;"
+        return "SELECT genre, sum(gross_revenue) as total_revenue, count(*) as movie_count, round(avg(opening_weekend), 1) as avg_opening FROM box_office_revenue GROUP BY genre ORDER BY total_revenue DESC;"
 
     def _generate_heuristic_chart_spec(self, user_query: str, sql: str, result: Dict[str, Any]) -> Dict[str, Any]:
         """Generates chart specifications based on column names and row values."""

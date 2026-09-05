@@ -1,6 +1,6 @@
 import datetime
+import math
 import random
-import numpy as np
 import pandas as pd
 
 def generate_box_office_data(num_records: int = 50000) -> pd.DataFrame:
@@ -90,11 +90,11 @@ def generate_streaming_metrics_data(num_records: int = 75000) -> pd.DataFrame:
         
         # Latency distribution (ms)
         if svc in ["content-delivery-cdn", "search-discovery"]:
-            latency = float(np.random.gamma(shape=2.0, scale=18.0)) + random.uniform(5, 25)
+            latency = random.gammavariate(2.0, 18.0) + random.uniform(5, 25)
         elif svc == "viewer-session-service":
-            latency = float(np.random.gamma(shape=3.0, scale=45.0)) + random.uniform(30, 80)
+            latency = random.gammavariate(3.0, 45.0) + random.uniform(30, 80)
         else:
-            latency = float(np.random.gamma(shape=2.5, scale=30.0)) + random.uniform(10, 40)
+            latency = random.gammavariate(2.5, 30.0) + random.uniform(10, 40)
             
         if code >= 500:
             latency += random.uniform(200, 1500)
@@ -165,20 +165,20 @@ def generate_audience_reviews_data(num_records: int = 15000) -> pd.DataFrame:
     
     # Topic prototype vectors (16 dimensions)
     topic_prototypes = {
-        "cinematography_praise": np.array([0.9, 0.1, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.3, 0.0]),
-        "action_quality": np.array([0.0, 0.9, 0.2, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3]),
-        "soundtrack_praise": np.array([0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0]),
-        "cast_performance": np.array([0.1, 0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0]),
-        "pacing_praise": np.array([0.0, 0.3, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1]),
-        "plot_neutral": np.array([0.1, 0.2, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0]),
-        "general_neutral": np.array([0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        "effects_neutral": np.array([0.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        "rewatch_neutral": np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        "pacing_complaint": np.array([0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        "cgi_complaint": np.array([0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0]),
-        "plot_complaint": np.array([0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0]),
-        "audio_complaint": np.array([0.0, 0.2, 0.0, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0]),
-        "streaming_issue": np.array([0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.0, 0.9, 0.0, 0.0])
+        "cinematography_praise": [0.9, 0.1, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.3, 0.0],
+        "action_quality": [0.0, 0.9, 0.2, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.3],
+        "soundtrack_praise": [0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0],
+        "cast_performance": [0.1, 0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0],
+        "pacing_praise": [0.0, 0.3, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1],
+        "plot_neutral": [0.1, 0.2, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0, 0.0],
+        "general_neutral": [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "effects_neutral": [0.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "rewatch_neutral": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "pacing_complaint": [0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "cgi_complaint": [0.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "plot_complaint": [0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.0],
+        "audio_complaint": [0.0, 0.2, 0.0, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0],
+        "streaming_issue": [0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.0, 0.9, 0.0, 0.0]
     }
     
     rows = []
@@ -202,11 +202,11 @@ def generate_audience_reviews_data(num_records: int = 15000) -> pd.DataFrame:
         feedback_date = base_date + datetime.timedelta(days=random.randint(0, 160), hours=random.randint(0, 23))
         
         # Add slight noise and normalize vector
-        proto = topic_prototypes.get(topic, np.random.rand(16))
-        vec = proto + np.random.normal(0, 0.05, 16)
-        norm = np.linalg.norm(vec)
+        proto = topic_prototypes.get(topic, [random.random() for _ in range(16)])
+        vec = [p + random.gauss(0, 0.05) for p in proto]
+        norm = math.sqrt(sum(x * x for x in vec))
         if norm > 0:
-            vec = vec / norm
+            vec = [x / norm for x in vec]
         
         rows.append({
             "feedback_id": i,

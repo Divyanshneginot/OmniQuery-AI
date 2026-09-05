@@ -20,6 +20,7 @@ import { UploadDatasetModal } from './components/UploadDatasetModal';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
 import type { AgentStep, QueryResultPayload, HealthResponse, SchemaResponse, ThemeMode } from './types';
+import { downloadCsv } from './utils';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api').replace(/\/$/, '');
 
@@ -150,11 +151,19 @@ export const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchHealthAndSchema();
+    let active = true;
+    const poll = async () => {
+      if (!active) return;
+      await fetchHealthAndSchema();
+    };
+    void poll();
     const timer = setInterval(() => {
-      fetchHealthAndSchema();
+      void poll();
     }, 8000);
-    return () => clearInterval(timer);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
   }, [fetchHealthAndSchema]);
 
   const handleRunQuery = async (targetQuery?: string) => {
@@ -320,18 +329,7 @@ export const App: React.FC = () => {
             showToast("Report URL copied to clipboard");
           }}
           onExport={queryResult ? () => {
-            const headers = queryResult.columns.join(',');
-            const csvRows = queryResult.rows.map(r =>
-              queryResult.columns.map(c => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(',')
-            );
-            const content = [headers, ...csvRows].join('\n');
-            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `omniquery_studio_${Date.now()}.csv`;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            downloadCsv(queryResult.columns, queryResult.rows);
             showToast(`Exported ${queryResult.rows.length} rows to CSV`);
           } : undefined}
         />

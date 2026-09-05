@@ -7,10 +7,19 @@ import duckdb
 import pandas as pd
 from dotenv import load_dotenv
 
+import re
 from app.db.seed_data import generate_box_office_data, generate_streaming_metrics_data, generate_audience_reviews_data
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+def sanitize_db_error(error: Any) -> str:
+    """Mask internal database URLs, ports, and C++ exception codes."""
+    msg = re.sub(r'https?://[^\s)]+', '[ClickHouse Cloud]', str(error)).strip()
+    msg = re.sub(r'Code:\s*\d+\.?\s*', '', msg)
+    msg = re.sub(r'DB::Exception:\s*', '', msg)
+    msg = re.sub(r'Received ClickHouse exception.*server response:\s*', '', msg, flags=re.IGNORECASE).strip()
+    return msg
 
 class DatabaseEngine:
     def __init__(self):
@@ -317,11 +326,7 @@ class DatabaseEngine:
                         "database_mode": self.mode
                     }
         except Exception as e:
-            err_msg = str(e)
-            # Mask internal database URLs, ports, and C++ exception codes to prevent credential or infrastructure leakage
-            err_msg = re.sub(r'https?://[^\s)]+', '[ClickHouse Cloud]', err_msg).strip()
-            err_msg = re.sub(r'Code:\s*\d+\.\s*', '', err_msg)
-            err_msg = re.sub(r'DB::Exception:\s*', '', err_msg)
+            err_msg = sanitize_db_error(e)
             raise RuntimeError(err_msg) from e
 
     def _map_duckdb_syntax_to_clickhouse(self, sql: str) -> str:

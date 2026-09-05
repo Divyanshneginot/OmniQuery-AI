@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import type { QueryResultPayload } from '../types';
 import { SemanticSearchWidget } from './SemanticSearchWidget';
+import { downloadCsv } from '../utils';
 
 interface ResultsWorkbenchProps {
   payload: QueryResultPayload;
@@ -42,64 +43,29 @@ interface ResultsWorkbenchProps {
 
 const PALETTE = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899'];
 
+const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
+const compactFmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
+
 const formatNumericValue = (val: number, keyName: string) => {
   const k = keyName.toLowerCase();
-  const abs = Math.abs(val);
-  const sign = val < 0 ? '-' : '';
-
-  if (k.includes('revenue') || k.includes('amount') || k.includes('profit') || k.includes('gross') || k.includes('budget') || k.includes('spend') || k.includes('cost')) {
-    if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
-    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
-    if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}k`;
-    return `${sign}$${abs.toLocaleString()}`;
-  }
-  if (k.includes('latency') || k.includes('ms')) {
-    return `${val.toLocaleString()} ms`;
-  }
-  if (k.includes('pct') || k.includes('percent') || k.includes('rate')) {
-    return `${val.toFixed(1)}%`;
-  }
-  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(2)}B`;
-  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}k`;
-  return val.toLocaleString();
+  if (/revenue|amount|profit|gross|budget|spend|cost/.test(k)) return currencyFmt.format(val);
+  if (/latency|ms|duration/.test(k)) return `${val.toLocaleString()} ms`;
+  if (/pct|percent|rate/.test(k)) return `${val.toFixed(1)}%`;
+  return Math.abs(val) >= 1000 ? compactFmt.format(val) : val.toLocaleString();
 };
 
 const getYAxisFormatter = (keys: string[]) => {
-  const isCurrency = keys.some(k => {
-    const l = k.toLowerCase();
-    return (
-      l.includes('revenue') ||
-      l.includes('profit') ||
-      l.includes('gross') ||
-      l.includes('budget') ||
-      l.includes('spend') ||
-      l.includes('cost') ||
-      l.includes('amount')
-    );
-  });
-  const isTime = keys.some(k => {
-    const l = k.toLowerCase();
-    return l.includes('latency') || l.includes('ms') || l.includes('duration');
-  });
-  const isPct = keys.some(k => {
-    const l = k.toLowerCase();
-    return l.includes('pct') || l.includes('percent') || l.includes('rate');
-  });
+  const isCurrency = keys.some(k => /revenue|profit|gross|budget|spend|cost|amount/i.test(k));
+  const isTime = keys.some(k => /latency|ms|duration/i.test(k));
+  const isPct = keys.some(k => /pct|percent|rate/i.test(k));
 
   return (val: number | string) => {
-    const num = typeof val === 'number' ? val : Number(val);
-    if (isNaN(num)) return String(val);
-    if (num === 0) return '0';
-    const abs = Math.abs(num);
-    const sign = num < 0 ? '-' : '';
-    const prefix = isCurrency ? '$' : '';
-    const suffix = isTime ? ' ms' : isPct ? '%' : '';
-
-    if (abs >= 1_000_000_000) return `${prefix}${sign}${(abs / 1_000_000_000).toFixed(1)}B${suffix}`;
-    if (abs >= 1_000_000) return `${prefix}${sign}${(abs / 1_000_000).toFixed(1)}M${suffix}`;
-    if (abs >= 1_000) return `${prefix}${sign}${(abs / 1_000).toFixed(0)}k${suffix}`;
-    return `${prefix}${sign}${abs.toLocaleString()}${suffix}`;
+    const num = Number(val);
+    if (isNaN(num) || num === 0) return String(val);
+    if (isCurrency) return currencyFmt.format(num);
+    if (isTime) return `${num} ms`;
+    if (isPct) return `${num.toFixed(1)}%`;
+    return compactFmt.format(num);
   };
 };
 
@@ -203,18 +169,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
 
   const handleExportCsv = () => {
     if (!rows || rows.length === 0) return;
-    const headers = columns.join(',');
-    const csvRows = rows.map((r) =>
-      columns.map((c) => `"${String(r[c] ?? '').replace(/"/g, '""')}"`).join(',')
-    );
-    const content = [headers, ...csvRows].join('\n');
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `omniquery_studio_${Date.now()}.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadCsv(columns, rows);
     onShowToast(`Exported ${rows.length} rows to CSV`);
   };
 
