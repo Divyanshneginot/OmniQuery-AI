@@ -1,12 +1,13 @@
 # OmniQuery AI
 
-[![Live App](https://img.shields.io/badge/Live_App-omni--query--ai.vercel.app-6366f1?style=for-the-badge&logo=vercel)](https://omni-query-ai.vercel.app/)
-[![ClickHouse Track](https://img.shields.io/badge/Hackathon_Track-ClickHouse_MCP-FAD000?style=for-the-badge&logo=clickhouse&logoColor=black)](https://agentic-cinema.devpost.com/)
-[![Backend Status](https://img.shields.io/badge/Render_API-Live_%26_Healthy-10b981?style=for-the-badge&logo=render)](https://omniquery-ai-gfq3.onrender.com/api/health)
+[![Release](https://img.shields.io/github/v/release/Divyanshneginot/OmniQuery-AI?logo=github)](https://github.com/Divyanshneginot/OmniQuery-AI/releases/tag/v1.0.0)
+[![Live App](https://img.shields.io/badge/Live_App-omni--query--ai.vercel.app-6366f1?logo=vercel)](https://omni-query-ai.vercel.app/)
+[![ClickHouse MCP](https://img.shields.io/badge/Track-ClickHouse_MCP-FAD000?logo=clickhouse&logoColor=black)](https://agentic-cinema.devpost.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Autonomous conversational intelligence and analytics for film studios, powered by Google ADK, Gemini, and ClickHouse Cloud on GCP.**
+**Autonomous conversational intelligence and analytics for film studios, powered by Google ADK, Gemini Flash, and ClickHouse Cloud on GCP.**
 
-OmniQuery AI translates natural language questions from studio executives and analysts into optimized ClickHouse SQL, executes queries across box office and streaming telemetry in sub-second time, self-heals syntax errors, and streams interactive visualizations directly to a conversational React canvas.
+OmniQuery AI translates natural language questions from studio executives and analysts into optimized ClickHouse SQL, executes queries across box office and streaming telemetry, automatically recovers from SQL dialect exceptions via reflection, and streams interactive visualizations directly to a conversational React canvas.
 
 ---
 
@@ -19,10 +20,10 @@ User Query (Natural Language)
 FastAPI SSE Gateway
           │
           ▼
-Google Agent Development Kit (ADK) + Gemini 3.6 Flash
+Google Agent Development Kit (ADK) + Gemini Flash
   ├── 1. Schema Introspection (via MCP: list_tables)
   ├── 2. SQL Planning (ClickHouse OLAP dialect)
-  ├── 3. Execution & Self-Healing Loop (via MCP: run_query)
+  ├── 3. Execution & Reflection Loop (via MCP: run_query)
   └── 4. Visualization & Brief Synthesis
           │
           ▼
@@ -38,9 +39,9 @@ Live SSE Stream ──► React 19 Dashboard (Recharts + Tailwind)
 ### Key Technical Pillars
 
 - **Official MCP Runtime Integration:** Uses the official `mcp-clickhouse` server package to run `list_tables` and `run_query` protocol tools at runtime.
-- **Multi-Agent Orchestration:** Built with Google Agent Development Kit (`Agent`, `Runner`, `InMemorySessionService`) and Gemini 3.6 Flash.
-- **Dual-Engine Analytical Backend:** Runs against ClickHouse Cloud on GCP with transparent fallback to in-memory DuckDB for zero-downtime development and offline demos.
-- **Self-Healing SQL:** If a generated query encounters syntax or schema mismatch errors, the runner catches the database exception, diagnoses the error trace, and regenerates corrected SQL automatically (up to 3 retries).
+- **Multi-Agent Orchestration:** Built with Google Agent Development Kit (`Agent`, `Runner`, `InMemorySessionService`) and Gemini Flash.
+- **Dual-Engine Analytical Backend:** Runs against ClickHouse Cloud on GCP with transparent fallback to in-memory DuckDB for local development and cluster degradation scenarios.
+- **Dialect Error Reflection:** If a generated query encounters syntax or schema mismatch errors, the runner catches the database exception, diagnoses the error trace, and regenerates corrected SQL automatically (up to 3 retries).
 - **Vector Semantic Search:** 16-dimensional normalized cosine similarity embeddings for clustering unstructured audience feedback without exact keyword matching.
 - **Zero-Storage Uploads:** Drag-and-drop CSV ingestion dynamically registered into the analytical engine in real-time.
 
@@ -202,7 +203,7 @@ npm run build
 
 | Component | Technologies |
 |---|---|
-| **Agent Framework** | Google Agent Development Kit (`google-adk`), Gemini 3.6 Flash (`google-genai`) |
+| **Agent Framework** | Google Agent Development Kit (`google-adk`), Gemini Flash (`google-genai`) |
 | **Model Context Protocol** | Official ClickHouse MCP Server (`mcp-clickhouse`) |
 | **Databases** | ClickHouse Cloud (Primary OLAP), DuckDB (Embedded Fallback) |
 | **API Backend** | FastAPI, Uvicorn, SSE Starlette, Pandas, Pydantic |
