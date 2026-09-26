@@ -282,6 +282,74 @@ export const App: React.FC = () => {
     }, 50);
   };
 
+  const renderQueryInputForm = (isHero = false) => (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleRunQuery();
+      }}
+      className={`border transition-all flex items-center gap-2 ${
+        isHero
+          ? 'border-[var(--line-strong)] focus-within:border-[var(--accent)] bg-[var(--panel-input)] p-2 sm:p-2.5 shadow-2xl'
+          : 'border-[var(--line-strong)] focus-within:border-[var(--accent)] bg-[var(--panel-input)] p-1.5 sm:p-2'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setIsUploadOpen(true)}
+        title="Upload custom dataset"
+        className="p-2 text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--panel-card)] border border-transparent hover:border-[var(--line)] transition-colors"
+      >
+        <Upload className="h-3.5 w-3.5" />
+      </button>
+
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Ask about theatrical revenue, streaming QoS, or audience feedback..."
+        disabled={isStreaming}
+        className="flex-1 text-xs sm:text-sm text-[var(--ink)] placeholder-[var(--muted-dim)] bg-transparent focus:outline-none px-2"
+      />
+
+      {query && !isStreaming && (
+        <button
+          type="button"
+          onClick={() => setQuery('')}
+          className="text-[var(--muted)] hover:text-[var(--ink)] p-1.5"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      {turnCount > 0 && (
+        <button
+          type="button"
+          onClick={handleNewAnalysis}
+          title="Active conversation memory. Click to reset thread."
+          className="hidden sm:flex items-center gap-1.5 px-2 py-1 border border-[var(--accent)] bg-[var(--accent-muted)] font-mono-tech text-[9px] uppercase tracking-wider text-[var(--ink-bright)] hover:border-[var(--coral)] hover:text-[var(--coral)] transition-colors"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+          <span>Turn {turnCount} (Reset ↺)</span>
+        </button>
+      )}
+
+      <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 border border-[var(--line)] bg-[var(--panel-card)] font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)]">
+        <span>GEMINI 3.6 FLASH</span>
+      </div>
+
+      <button
+        type="submit"
+        disabled={isStreaming || !query.trim()}
+        className="px-3.5 py-1.5 bg-[var(--ink-bright)] text-[var(--paper)] hover:bg-[var(--accent)] font-mono-tech text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:pointer-events-none flex-shrink-0"
+      >
+        <span>Run</span>
+        <CornerDownLeft className="h-3 w-3" />
+      </button>
+    </form>
+  );
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -470,16 +538,16 @@ export const App: React.FC = () => {
               />
             )}
 
-            {/* Empty State / Editorial Hero */}
+            {/* Empty State / Centered Command Center */}
             {!queryResult && steps.length === 0 && !isStreaming && (
-              <div className="py-6 sm:py-12 space-y-10 animate-fadeIn">
+              <div className="py-8 sm:py-16 max-w-4xl mx-auto space-y-8 animate-fadeIn">
                 
-                {/* Hero Section */}
-                <div className="space-y-4 max-w-3xl">
-                  <div className="flex items-center gap-2.5 font-mono-tech text-[10px] tracking-[0.14em] uppercase text-[var(--accent)]">
+                {/* Hero Title & Architecture Ribbon */}
+                <div className="space-y-4">
+                  <div className="inline-flex items-center gap-2 font-mono-tech text-[10px] tracking-[0.14em] uppercase text-[var(--accent)] px-2.5 py-1 border border-[var(--line)] bg-[var(--panel-card)]">
                     <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-signal" />
                     <span>
-                      ANALYTICAL INSTRUMENT · {health?.database_mode ? (health.is_cloud_clickhouse ? 'CLICKHOUSE GCP' : 'DUCKDB LOCAL') : 'STANDBY'} · 50,000 RECORDS
+                      {health?.is_cloud_clickhouse ? 'ClickHouse Cloud (GCP)' : 'DuckDB Columnar (Zero-Config)'} · 50,000 Records
                     </span>
                   </div>
                   
@@ -487,12 +555,12 @@ export const App: React.FC = () => {
                     Interrogate the data<br className="hidden sm:inline" /> before you commit.
                   </h1>
                   
-                  <p className="text-xs sm:text-sm text-[var(--muted)] max-w-xl font-normal leading-relaxed pt-1">
-                    Instant natural language intelligence across theatrical gross, edge CDN telemetry, and audience sentiment. ClickHouse OLAP executes your queries in milliseconds with mathematical proof.
+                  <p className="text-xs sm:text-sm text-[var(--muted)] max-w-2xl font-normal leading-relaxed">
+                    Natural language analytical agent across theatrical revenue, streaming QoS, and audience sentiment. ClickHouse OLAP executes in milliseconds with mathematical proof.
                   </p>
 
                   {/* Architecture Capability Highlights */}
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <div className="flex items-center gap-1.5 px-2.5 py-1 border border-[var(--line)] bg-[var(--panel-card)] text-[10px] font-mono-tech text-[var(--muted)]">
                       <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
                       <span className="text-[var(--ink)] font-medium">Gemini 3.6 Flash</span>
@@ -516,14 +584,23 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Section Head */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b border-[var(--line)] pb-2.5">
+                {/* Primary Query Command Center */}
+                <div className="space-y-2 pt-2">
+                  {renderQueryInputForm(true)}
+                  <div className="flex items-center justify-between px-1 text-[9px] font-mono-tech uppercase tracking-wider text-[var(--muted)]">
+                    <span>{health?.is_cloud_clickhouse ? 'ClickHouse Cloud OLAP · Cluster Connected' : 'Embedded DuckDB Columnar Engine · Active'}</span>
+                    <span>Press <kbd className="font-mono-tech bg-[var(--panel-card)] border border-[var(--line)] px-1 py-0.5 text-[var(--ink)]">↵ Return</kbd> to analyze</span>
+                  </div>
+                </div>
+
+                {/* Curated Studio Benchmarks */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between border-b border-[var(--line)] pb-2">
                     <span className="font-mono-tech text-[10px] tracking-wider uppercase text-[var(--muted)] font-medium">
-                      Curated Studio Benchmarks
+                      Curated Benchmarks
                     </span>
                     <span className="font-mono-tech text-[9px] tracking-widest uppercase text-[var(--accent)]">
-                      Ready to Run (Keys 1-3)
+                      Hotkeys [1] [2] [3]
                     </span>
                   </div>
 
@@ -535,10 +612,10 @@ export const App: React.FC = () => {
                         <button
                           key={idx}
                           onClick={() => handleSelectQuery(item.query)}
-                          className="text-left p-5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-card)] hover:-translate-y-0.5 transition-all flex flex-col justify-between group relative"
+                          className="text-left p-4 sm:p-5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-card)] hover:-translate-y-0.5 transition-all flex flex-col justify-between group relative"
                         >
                           <div>
-                            <div className="flex items-center justify-between mb-3.5">
+                            <div className="flex items-center justify-between mb-3">
                               <span className="p-1.5 border border-[var(--line)] bg-[var(--panel)] text-[var(--accent)] group-hover:border-[var(--accent)] transition-colors">
                                 <IconComponent className="h-3.5 w-3.5" />
                               </span>
@@ -583,77 +660,19 @@ export const App: React.FC = () => {
           </div>
         </main>
 
-        {/* 3. Bottom Input Dock (Elsewhere Instrument Console) */}
-        <footer className="p-4 sm:p-5 border-t border-[var(--line)] bg-[var(--paper)]/95 backdrop-blur-xl flex-shrink-0 flex justify-center">
-          <div className="w-full max-w-4xl xl:max-w-5xl">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleRunQuery();
-              }}
-              className="border border-[var(--line-strong)] focus-within:border-[var(--accent)] bg-[var(--panel-input)] transition-all p-1.5 sm:p-2 flex items-center gap-2"
-            >
-              <button
-                type="button"
-                onClick={() => setIsUploadOpen(true)}
-                title="Upload custom dataset"
-                className="p-2 text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--panel-card)] border border-transparent hover:border-[var(--line)] transition-colors"
-              >
-                <Upload className="h-3.5 w-3.5" />
-              </button>
+        {/* 3. Bottom Input Dock (Only visible when actively streaming or results loaded) */}
+        {(queryResult || steps.length > 0 || isStreaming) && (
+          <footer className="p-4 sm:p-5 border-t border-[var(--line)] bg-[var(--paper)]/95 backdrop-blur-xl flex-shrink-0 flex justify-center animate-fadeIn">
+            <div className="w-full max-w-4xl xl:max-w-5xl">
+              {renderQueryInputForm(false)}
 
-              <input
-                ref={inputRef}
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ask about theatrical revenue, streaming QoS, or audience feedback..."
-                disabled={isStreaming}
-                className="flex-1 text-xs sm:text-sm text-[var(--ink)] placeholder-[var(--muted-dim)] bg-transparent focus:outline-none px-2"
-              />
-
-              {query && !isStreaming && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  className="text-[var(--muted)] hover:text-[var(--ink)] p-1.5"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-
-              {turnCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleNewAnalysis}
-                  title="Active conversation memory. Click to reset thread."
-                  className="hidden sm:flex items-center gap-1.5 px-2 py-1 border border-[var(--accent)] bg-[var(--accent-muted)] font-mono-tech text-[9px] uppercase tracking-wider text-[var(--ink-bright)] hover:border-[var(--coral)] hover:text-[var(--coral)] transition-colors"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-                  <span>Turn {turnCount} (Reset ↺)</span>
-                </button>
-              )}
-
-              <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 border border-[var(--line)] bg-[var(--panel-card)] font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)]">
-                <span>GEMINI 3.6 FLASH</span>
+              <div className="flex items-center justify-between px-1 pt-2 font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                <span>{health?.is_cloud_clickhouse ? 'ClickHouse Cloud OLAP · Cluster Connected' : 'Embedded DuckDB Columnar Engine · Active'}</span>
+                <span className="hidden sm:inline">Press <kbd className="font-mono-tech bg-[var(--panel-card)] border border-[var(--line)] px-1 py-0.5 text-[var(--ink)]">↵ Return</kbd> to analyze</span>
               </div>
-
-              <button
-                type="submit"
-                disabled={isStreaming || !query.trim()}
-                className="px-3.5 py-1.5 bg-[var(--ink-bright)] text-[var(--paper)] hover:bg-[var(--accent)] font-mono-tech text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:pointer-events-none flex-shrink-0"
-              >
-                <span>Run</span>
-                <CornerDownLeft className="h-3 w-3" />
-              </button>
-            </form>
-
-            <div className="flex items-center justify-between px-1 pt-2 font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)]">
-              <span>ClickHouse Cloud OLAP · Cluster Connected</span>
-              <span className="hidden sm:inline">Press <kbd className="font-mono-tech bg-[var(--panel-card)] border border-[var(--line)] px-1 py-0.5 text-[var(--ink)]">↵ Return</kbd> to analyze</span>
             </div>
-          </div>
-        </footer>
+          </footer>
+        )}
 
       </div>
 

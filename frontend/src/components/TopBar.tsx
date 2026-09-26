@@ -61,7 +61,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       {/* Center Instrument Tag (Elsewhere signature) */}
       <div className="hidden md:flex items-center gap-2 font-mono-tech text-[10px] tracking-[0.14em] uppercase text-[var(--muted)]">
         <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-        <span>ANALYTICAL INSTRUMENT · CLICKHOUSE</span>
+        <span>ANALYTICAL INSTRUMENT · {health?.is_cloud_clickhouse ? 'CLICKHOUSE' : 'DUCKDB'}</span>
       </div>
 
       {/* Right Controls */}
