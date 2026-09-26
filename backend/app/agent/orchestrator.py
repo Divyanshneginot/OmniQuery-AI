@@ -24,8 +24,8 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 class KeyMetricModel(BaseModel):
-    label: str
-    value: str
+    label: str = "Metric"
+    value: str = ""
     trend: Optional[str] = "neutral"
 
 class ChartSpecModel(BaseModel):
@@ -85,6 +85,11 @@ class AgentOrchestrator:
             clean = match.group(1).strip()
         try:
             parsed = json.loads(clean)
+            if isinstance(parsed, dict) and "key_metrics" in parsed and isinstance(parsed["key_metrics"], list):
+                default_metric_labels = ["Top Segment", "Total Volume", "Market Share / Margin"]
+                for i, m in enumerate(parsed["key_metrics"]):
+                    if isinstance(m, dict) and not str(m.get("label", "")).strip():
+                        m["label"] = default_metric_labels[i] if i < len(default_metric_labels) else f"Key Metric {i + 1}"
             return ChartSpecModel.model_validate(parsed).model_dump()
         except Exception:
             # Fallback validated Pydantic model

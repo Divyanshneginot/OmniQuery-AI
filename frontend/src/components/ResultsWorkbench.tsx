@@ -172,7 +172,21 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
   const rightAxisFormatter = useMemo(() => getSingleAxisFormatter(yKeys[1] || ''), [yKeys]);
 
   const displayMetrics = useMemo(() => {
-    const list = [...(chart_spec.key_metrics || [])];
+    const rawList = chart_spec.key_metrics || [];
+    const list = rawList.map((m, idx) => {
+      let label = m.label?.trim() || (m as any).title?.trim() || (m as any).name?.trim() || '';
+      if (!label) {
+        if (idx === 0) label = 'Top Segment';
+        else if (idx === 1) label = 'Total Volume';
+        else label = 'Key Margin / Share';
+      }
+      return {
+        ...m,
+        label,
+        trend: m.trend || 'neutral'
+      };
+    });
+
     if (list.length === 0) {
       return [
         { label: 'Execution Latency', value: `${execution_time_ms} ms`, trend: 'positive' as const },
@@ -275,7 +289,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
               ) : (
                 <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               )}
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip cursor={{ stroke: 'rgba(255, 255, 255, 0.2)', strokeWidth: 1, strokeDasharray: '3 3' }} content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Line
@@ -316,7 +330,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
               ) : (
                 <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               )}
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip cursor={{ stroke: 'rgba(255, 255, 255, 0.2)', strokeWidth: 1, strokeDasharray: '3 3' }} content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Area
@@ -385,7 +399,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
               ) : (
                 <YAxis stroke="#94a3b8" tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={yAxisFormatter} width={58} />
               )}
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip cursor={{ fill: 'rgba(255, 255, 255, 0.04)' }} content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: 8, fontSize: '11px' }} />
               {yKeys.map((k, i) => (
                 <Bar
@@ -441,13 +455,13 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
             key={idx}
             className="p-4 border border-[var(--line)] hover:border-[var(--line-strong)] bg-[var(--panel-card)] transition-colors flex flex-col justify-between group"
           >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-[var(--line-subtle)] pb-2">
               <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[var(--muted)]">
                 {metric.label}
               </span>
               {renderTrendIcon(metric.trend)}
             </div>
-            <div className="text-2xl sm:text-3xl font-light font-mono-tech text-[var(--ink-bright)] mt-2 tracking-tight">
+            <div className="text-2xl sm:text-3xl font-light font-mono-tech text-[var(--ink-bright)] mt-3 tracking-tight">
               {metric.value}
             </div>
           </div>
