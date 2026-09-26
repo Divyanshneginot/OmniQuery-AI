@@ -55,21 +55,27 @@ const CURATED_PROMPTS = [
     description: 'Theatrical gross revenue, opening multipliers, and net profits by genre.',
     query: 'Which movie genres yielded the highest net profit across European screens in Q2?',
     icon: Film,
-    metric: '10,000 records'
+    metric: '10,000 records',
+    tag: 'Aggregations & Multipliers',
+    keyHint: '1'
   },
   {
     title: 'Streaming CDN Telemetry',
     description: 'p95 player latency, HTTP 5xx error spikes, and edge QoS metrics.',
     query: 'Show me 95th percentile streaming latency and error counts per service endpoint.',
     icon: Activity,
-    metric: '15,000 logs'
+    metric: '15,000 logs',
+    tag: 'quantileExact(0.95)',
+    keyHint: '2'
   },
   {
     title: 'Audience Review Sentiment',
     description: 'Semantic vector similarity on screenplay pacing and visual effects feedback.',
     query: 'Find audience reviews complaining about pacing issues using semantic search.',
     icon: BrainCircuit,
-    metric: '5,000 reviews'
+    metric: '5,000 reviews',
+    tag: 'Vector Cosine Similarity',
+    keyHint: '3'
   }
 ];
 
@@ -292,6 +298,13 @@ export const App: React.FC = () => {
         e.preventDefault();
         setIsShortcutsOpen(prev => !prev);
       }
+      if (['1', '2', '3'].includes(e.key) && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        const benchmarkIdx = parseInt(e.key, 10) - 1;
+        if (CURATED_PROMPTS[benchmarkIdx]) {
+          e.preventDefault();
+          handleSelectQuery(CURATED_PROMPTS[benchmarkIdx].query);
+        }
+      }
       if (e.key === 'Escape') {
         setIsSettingsOpen(false);
         setIsShortcutsOpen(false);
@@ -465,7 +478,9 @@ export const App: React.FC = () => {
                 <div className="space-y-4 max-w-3xl">
                   <div className="flex items-center gap-2.5 font-mono-tech text-[10px] tracking-[0.14em] uppercase text-[var(--accent)]">
                     <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-signal" />
-                    <span>ANALYTICAL INSTRUMENT · CLICKHOUSE GCP · 30,000 RECORDS</span>
+                    <span>
+                      ANALYTICAL INSTRUMENT · {health?.database_mode ? (health.is_cloud_clickhouse ? 'CLICKHOUSE GCP' : 'DUCKDB LOCAL') : 'STANDBY'} · 50,000 RECORDS
+                    </span>
                   </div>
                   
                   <h1 className="text-3xl sm:text-5xl lg:text-6xl font-light tracking-[-0.05em] text-[var(--ink-bright)] leading-[0.96]">
@@ -475,6 +490,30 @@ export const App: React.FC = () => {
                   <p className="text-xs sm:text-sm text-[var(--muted)] max-w-xl font-normal leading-relaxed pt-1">
                     Instant natural language intelligence across theatrical gross, edge CDN telemetry, and audience sentiment. ClickHouse OLAP executes your queries in milliseconds with mathematical proof.
                   </p>
+
+                  {/* Architecture Capability Highlights */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-[var(--line)] bg-[var(--panel-card)] text-[10px] font-mono-tech text-[var(--muted)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                      <span className="text-[var(--ink)] font-medium">Gemini 3.6 Flash</span>
+                      <span className="text-[var(--muted-dim)]">· NL to SQL AST</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-[var(--line)] bg-[var(--panel-card)] text-[10px] font-mono-tech text-[var(--muted)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--gold)]" />
+                      <span className="text-[var(--ink)] font-medium">ClickHouse & DuckDB</span>
+                      <span className="text-[var(--muted-dim)]">· Sub-50ms OLAP</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-[var(--line)] bg-[var(--panel-card)] text-[10px] font-mono-tech text-[var(--muted)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span className="text-[var(--ink)] font-medium">Self-Healing</span>
+                      <span className="text-[var(--muted-dim)]">· Visual SQL Diff</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 border border-[var(--line)] bg-[var(--panel-card)] text-[10px] font-mono-tech text-[var(--muted)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                      <span className="text-[var(--ink)] font-medium">Pydantic Guardrails</span>
+                      <span className="text-[var(--muted-dim)]">· Strict Typed Contracts</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Section Head */}
@@ -484,7 +523,7 @@ export const App: React.FC = () => {
                       Curated Studio Benchmarks
                     </span>
                     <span className="font-mono-tech text-[9px] tracking-widest uppercase text-[var(--accent)]">
-                      Ready to Run
+                      Ready to Run (Keys 1-3)
                     </span>
                   </div>
 
@@ -496,16 +535,21 @@ export const App: React.FC = () => {
                         <button
                           key={idx}
                           onClick={() => handleSelectQuery(item.query)}
-                          className="text-left p-5 border border-[var(--line)] hover:border-[var(--line-strong)] bg-[var(--panel-card)] hover:-translate-y-0.5 transition-all flex flex-col justify-between group relative"
+                          className="text-left p-5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-card)] hover:-translate-y-0.5 transition-all flex flex-col justify-between group relative"
                         >
                           <div>
-                            <div className="flex items-center justify-between mb-4">
-                              <span className="p-1.5 border border-[var(--line)] bg-[var(--panel)] text-[var(--accent)]">
+                            <div className="flex items-center justify-between mb-3.5">
+                              <span className="p-1.5 border border-[var(--line)] bg-[var(--panel)] text-[var(--accent)] group-hover:border-[var(--accent)] transition-colors">
                                 <IconComponent className="h-3.5 w-3.5" />
                               </span>
-                              <span className="font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)] border border-[var(--line)] px-1.5 py-0.5">
-                                {item.metric}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)] border border-[var(--line)] px-1.5 py-0.5">
+                                  {item.metric}
+                                </span>
+                                <kbd className="font-mono-tech text-[9px] px-1.5 py-0.5 border border-[var(--line)] bg-[var(--panel-input)] text-[var(--muted)] group-hover:text-[var(--accent)] group-hover:border-[var(--accent)] transition-colors">
+                                  [{item.keyHint}]
+                                </kbd>
+                              </div>
                             </div>
                             <h3 className="text-xs sm:text-sm font-medium text-[var(--ink-bright)] group-hover:text-[var(--accent)] transition-colors">
                               {item.title}
@@ -513,11 +557,19 @@ export const App: React.FC = () => {
                             <p className="text-[11px] text-[var(--muted)] mt-1.5 leading-relaxed">
                               {item.description}
                             </p>
+                            <div className="mt-3">
+                              <span className="font-mono-tech text-[9px] uppercase tracking-wider text-[var(--accent)] bg-[var(--accent-muted)] px-1.5 py-0.5 border border-[var(--accent)]/30">
+                                {item.tag}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="mt-5 pt-3 border-t border-[var(--line)] flex items-center justify-between font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)] group-hover:text-[var(--accent)] transition-colors">
-                            <span>Execute</span>
-                            <span>START ↘</span>
+                            <span>Press [{item.keyHint}] or click</span>
+                            <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform text-[var(--accent)] font-semibold">
+                              <span>Execute</span>
+                              <CornerDownLeft className="h-3 w-3" />
+                            </span>
                           </div>
                         </button>
                       );

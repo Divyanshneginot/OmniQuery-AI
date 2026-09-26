@@ -28,7 +28,28 @@ class DatabaseEngine:
         self.client = None
         self.duck_conn = None
         self.mode = "Embedded Analytical Engine (Zero-Config)"
+        self._init_duckdb()
         self._init_connection()
+
+    def _init_duckdb(self):
+        if self.duck_conn is None:
+            logger.info("Bootstrapping Embedded High-Speed Analytical Database...")
+            self.duck_conn = duckdb.connect(database=":memory:")
+            try:
+                self.duck_conn.execute("INSTALL json;")
+                self.duck_conn.execute("LOAD json;")
+            except Exception:
+                pass
+            
+            # Initialize embedded schema
+            df_box_office = generate_box_office_data(25000)
+            df_streaming = generate_streaming_metrics_data(20000)
+            df_reviews = generate_audience_reviews_data(5000)
+            
+            self.duck_conn.register("box_office_revenue", df_box_office)
+            self.duck_conn.register("streaming_platform_metrics", df_streaming)
+            self.duck_conn.register("audience_reviews", df_reviews)
+            logger.info("Embedded database initialized with 50,000 synthetic entertainment records.")
 
     def _init_connection(self):
         ch_host = os.getenv("CLICKHOUSE_HOST", "").strip()
@@ -39,46 +60,46 @@ class DatabaseEngine:
         ch_secure = os.getenv("CLICKHOUSE_SECURE", "True").lower() == "true"
 
         if ch_host and ch_pass:
-            try:
-                import clickhouse_connect
-                logger.info(f"Connecting to ClickHouse Cloud at {ch_host}:{ch_port}...")
-                self.client = clickhouse_connect.get_client(
-                    host=ch_host,
-                    port=ch_port,
-                    username=ch_user,
-                    password=ch_pass,
-                    database=ch_db,
-                    secure=ch_secure,
-                    autogenerate_session_id=False
-                )
-                self.is_cloud_clickhouse = True
-                self.mode = f"ClickHouse Cloud ({ch_host})"
-                logger.info("Successfully connected to ClickHouse Cloud!")
-                self._seed_clickhouse_cloud_if_empty()
+            if self.connect_cloud(ch_host, ch_user, ch_pass, ch_port, ch_db, ch_secure):
                 return
-            except Exception as e:
-                logger.warning(f"Failed to connect or seed ClickHouse Cloud ({e}). Falling back to Embedded Engine.")
-                self.is_cloud_clickhouse = False
-                self.client = None
 
-        # Fallback: Embedded High-Speed Columnar Engine with DuckDB
-        logger.info("Bootstrapping Embedded High-Speed Analytical Database...")
-        self.duck_conn = duckdb.connect(database=":memory:")
-        self.duck_conn.execute("INSTALL json;")
-        self.duck_conn.execute("LOAD json;")
-        
-        # Initialize embedded schema
-        df_box_office = generate_box_office_data(25000)
-        df_streaming = generate_streaming_metrics_data(20000)
-        df_reviews = generate_audience_reviews_data(5000)
-        
-        self.duck_conn.register("box_office_revenue", df_box_office)
-        self.duck_conn.register("streaming_platform_metrics", df_streaming)
-        self.duck_conn.register("audience_reviews", df_reviews)
-        
         self.is_cloud_clickhouse = False
         self.mode = "Embedded Analytical Engine (DuckDB In-Memory)"
-        logger.info("Embedded database initialized with 50,000 synthetic entertainment records.")
+
+    def connect_cloud(self, host: str, user: str = "default", password: str = "", port: int = 8443, database: str = "default", secure: bool = True) -> bool:
+        """Connects or reconnects to ClickHouse Cloud and validates connection."""
+        if not host or not password:
+            return False
+        try:
+            import clickhouse_connect
+            logger.info(f"Connecting to ClickHouse Cloud at {host}:{port}...")
+            client = clickhouse_connect.get_client(
+                host=host,
+                port=port,
+                username=user,
+                password=password,
+                database=database,
+                secure=secure,
+                connect_timeout=6,
+                send_receive_timeout=15,
+                autogenerate_session_id=False
+            )
+            # Verify live connectivity
+            client.command("SELECT 1")
+            with self._lock:
+                self.client = client
+                self.is_cloud_clickhouse = True
+                self.mode = f"ClickHouse Cloud ({host})"
+            logger.info(f"Successfully connected to ClickHouse Cloud ({host})!")
+            self._seed_clickhouse_cloud_if_empty()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to connect to ClickHouse Cloud at {host} ({e}). Remaining in Embedded DuckDB mode.")
+            with self._lock:
+                self.is_cloud_clickhouse = False
+                self.client = None
+                self.mode = "Embedded Analytical Engine (DuckDB In-Memory)"
+            return False
 
     def _seed_clickhouse_cloud_if_empty(self):
         try:
@@ -187,24 +208,33 @@ class DatabaseEngine:
             safe_table_name = f"dataset_{safe_table_name}"
 
         if self.is_cloud_clickhouse and self.client:
-            type_mapping = {
-                "int64": "Int64",
-                "int32": "Int32",
-                "float64": "Float64",
-                "float32": "Float32",
-                "bool": "UInt8",
-                "datetime64[ns]": "DateTime",
-            }
-            col_defs = []
-            for col, dtype in df.dtypes.items():
-                sanitized_col = re.sub(r'[^a-zA-Z0-9_]', '_', str(col))
-                ch_type = type_mapping.get(str(dtype), "String")
-                col_defs.append(f"`{sanitized_col}` {ch_type}")
-            
-            ddl = f"CREATE TABLE IF NOT EXISTS `{safe_table_name}` ({', '.join(col_defs)}) ENGINE = MergeTree() ORDER BY tuple();"
-            self.client.command(ddl)
-            self.client.insert_df(safe_table_name, df)
+            try:
+                type_mapping = {
+                    "int64": "Int64",
+                    "int32": "Int32",
+                    "float64": "Float64",
+                    "float32": "Float32",
+                    "bool": "UInt8",
+                    "datetime64[ns]": "DateTime",
+                }
+                col_defs = []
+                for col, dtype in df.dtypes.items():
+                    sanitized_col = re.sub(r'[^a-zA-Z0-9_]', '_', str(col))
+                    ch_type = type_mapping.get(str(dtype), "String")
+                    col_defs.append(f"`{sanitized_col}` {ch_type}")
+                
+                ddl = f"CREATE TABLE IF NOT EXISTS `{safe_table_name}` ({', '.join(col_defs)}) ENGINE = MergeTree() ORDER BY tuple();"
+                self.client.command(ddl)
+                self.client.insert_df(safe_table_name, df)
+            except Exception as e:
+                logger.warning(f"Failed to ingest dataset into ClickHouse Cloud ({e}). Ingesting into DuckDB fallback.")
+                self._init_duckdb()
+                temp_var = f"df_upload_{safe_table_name}"
+                self.duck_conn.register(temp_var, df)
+                self.duck_conn.execute(f"CREATE OR REPLACE TABLE {safe_table_name} AS SELECT * FROM {temp_var};")
+                self.duck_conn.unregister(temp_var)
         else:
+            self._init_duckdb()
             temp_var = f"df_upload_{safe_table_name}"
             self.duck_conn.register(temp_var, df)
             self.duck_conn.execute(f"CREATE OR REPLACE TABLE {safe_table_name} AS SELECT * FROM {temp_var};")
@@ -221,24 +251,33 @@ class DatabaseEngine:
         """Returns schemas and column metadata for all tables including uploaded datasets."""
         tables_info = {}
         if self.is_cloud_clickhouse and self.client:
-            with self._lock:
-                tables = self.client.command("SHOW TABLES").split("\n")
-                for table in tables:
-                    table = table.strip()
-                    if not table: continue
-                    try:
-                        cols_df = self.client.query_df(f"DESCRIBE TABLE {table}")
-                        sample_df = self.client.query_df(f"SELECT * FROM {table} LIMIT 3")
-                        import json
-                        tables_info[table] = {
-                            "columns": json.loads(cols_df.to_json(orient="records")),
-                            "sample_rows": json.loads(sample_df.to_json(orient="records")),
-                            "row_count": int(self.client.command(f"SELECT count() FROM {table}"))
-                        }
-                    except Exception as e:
-                        logger.warning(f"Failed to inspect cloud table {table}: {e}")
-        else:
-            # Query duckdb internal tables
+            try:
+                with self._lock:
+                    tables = self.client.command("SHOW TABLES").split("\n")
+                    for table in tables:
+                        table = table.strip()
+                        if not table: continue
+                        try:
+                            cols_df = self.client.query_df(f"DESCRIBE TABLE {table}")
+                            sample_df = self.client.query_df(f"SELECT * FROM {table} LIMIT 3")
+                            import json
+                            tables_info[table] = {
+                                "columns": json.loads(cols_df.to_json(orient="records")),
+                                "sample_rows": json.loads(sample_df.to_json(orient="records")),
+                                "row_count": int(self.client.command(f"SELECT count() FROM {table}"))
+                            }
+                        except Exception as e:
+                            logger.warning(f"Failed to inspect cloud table {table}: {e}")
+            except Exception as conn_err:
+                logger.warning(f"ClickHouse Cloud connection failed during schema inspection ({conn_err}). Gracefully degrading to DuckDB.")
+                with self._lock:
+                    self.is_cloud_clickhouse = False
+                    self.client = None
+                    self.mode = "Embedded Analytical Engine (DuckDB In-Memory)"
+                tables_info = {}
+
+        if not self.is_cloud_clickhouse or not tables_info:
+            self._init_duckdb()
             tables_res = self.duck_conn.execute("SHOW TABLES;").fetchall()
             tables = [t[0] for t in tables_res]
             for table in tables:
@@ -288,43 +327,54 @@ class DatabaseEngine:
         try:
             with self._lock:
                 if self.is_cloud_clickhouse and self.client:
-                    # Enforce Query Complexity Guardrails
-                    settings = {
-                        "max_execution_time": 10,
-                        "max_rows_to_read": 50000000,
-                        "max_result_rows": 10000,
-                    }
-                    mapped_sql = self._map_duckdb_syntax_to_clickhouse(cleaned_sql)
-                    result = self.client.query(mapped_sql, settings=settings)
-                    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-                    columns = result.column_names
-                    rows = [dict(zip(columns, row)) for row in result.result_rows]
-                    return {
-                        "success": True,
-                        "columns": columns,
-                        "rows": rows[:500], # capped at 500 rows for rendering
-                        "total_rows_returned": len(rows),
-                        "execution_time_ms": duration_ms,
-                        "rows_scanned": result.summary.get("read_rows", len(rows)) if hasattr(result, "summary") else len(rows),
-                        "database_mode": self.mode
-                    }
-                else:
-                    # Map ClickHouse specific functions to standard SQL if running in local DuckDB mode
-                    mapped_sql = self._map_clickhouse_syntax_to_duckdb(cleaned_sql)
-                    res = self.duck_conn.execute(mapped_sql)
-                    columns = [desc[0] for desc in res.description]
-                    raw_rows = res.fetchall()
-                    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-                    rows = [dict(zip(columns, row)) for row in raw_rows]
-                    return {
-                        "success": True,
-                        "columns": columns,
-                        "rows": rows[:500],
-                        "total_rows_returned": len(rows),
-                        "execution_time_ms": duration_ms,
-                        "rows_scanned": len(rows), # fallback using actual returned rows instead of fake multiplier
-                        "database_mode": self.mode
-                    }
+                    try:
+                        # Enforce Query Complexity Guardrails
+                        settings = {
+                            "max_execution_time": 10,
+                            "max_rows_to_read": 50000000,
+                            "max_result_rows": 10000,
+                        }
+                        mapped_sql = self._map_duckdb_syntax_to_clickhouse(cleaned_sql)
+                        result = self.client.query(mapped_sql, settings=settings)
+                        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                        columns = result.column_names
+                        rows = [dict(zip(columns, row)) for row in result.result_rows]
+                        return {
+                            "success": True,
+                            "columns": columns,
+                            "rows": rows[:500], # capped at 500 rows for rendering
+                            "total_rows_returned": len(rows),
+                            "execution_time_ms": duration_ms,
+                            "rows_scanned": result.summary.get("read_rows", len(rows)) if hasattr(result, "summary") else len(rows),
+                            "database_mode": self.mode
+                        }
+                    except Exception as ch_err:
+                        err_str = str(ch_err).lower()
+                        if any(k in err_str for k in ["connection", "ssl", "timeout", "eof", "refused", "closed", "reset", "broken pipe"]):
+                            logger.warning(f"ClickHouse Cloud connection lost ({ch_err}). Falling back to DuckDB.")
+                            self.is_cloud_clickhouse = False
+                            self.client = None
+                            self.mode = "Embedded Analytical Engine (DuckDB In-Memory)"
+                        else:
+                            raise ch_err
+
+                # Fallback to embedded DuckDB engine
+                self._init_duckdb()
+                mapped_sql = self._map_clickhouse_syntax_to_duckdb(cleaned_sql)
+                res = self.duck_conn.execute(mapped_sql)
+                columns = [desc[0] for desc in res.description]
+                raw_rows = res.fetchall()
+                duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+                rows = [dict(zip(columns, row)) for row in raw_rows]
+                return {
+                    "success": True,
+                    "columns": columns,
+                    "rows": rows[:500],
+                    "total_rows_returned": len(rows),
+                    "execution_time_ms": duration_ms,
+                    "rows_scanned": len(rows),
+                    "database_mode": self.mode
+                }
         except Exception as e:
             err_msg = sanitize_db_error(e)
             raise RuntimeError(err_msg) from e

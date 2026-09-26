@@ -15,6 +15,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   const shortcuts = [
     { key: "⌘ / Ctrl + K", desc: "Focus natural language prompt input" },
     { key: "⌘ / Ctrl + N", desc: "Start new analysis thread" },
+    { key: "1 / 2 / 3", desc: "Instantly trigger curated benchmark query" },
     { key: "↵ Return", desc: "Execute query across ClickHouse OLAP" },
     { key: "?", desc: "Toggle keyboard shortcuts guide" },
     { key: "Esc", desc: "Dismiss active dialog" }
