@@ -1,65 +1,145 @@
+@import "https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Manrope:wght@300;400;500;600;700&display=swap";
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+:root {
+  --paper: #090b10;
+  --panel: #0f131a;
+  --panel-card: #141822;
+  --panel-input: #181d2a;
+  --ink: #f1f5f9;
+  --ink-bright: #ffffff;
+  --muted: #94a3b8;
+  --muted-dim: #64748b;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-subtle: rgba(255, 255, 255, 0.05);
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --accent: #38bdf8;
+  --accent-hover: #7dd3fc;
+  --accent-muted: rgba(56, 189, 248, 0.12);
+  --accent-border: rgba(56, 189, 248, 0.35);
+  --coral: #f43f5e;
+  --coral-muted: rgba(244, 63, 94, 0.15);
+  --periwinkle: #818cf8;
+  --periwinkle-muted: rgba(129, 140, 248, 0.15);
+  --gold: #fbbf24;
+  --gold-muted: rgba(251, 191, 36, 0.15);
+  --success: #34d399;
+}
+
+html.light {
+  --paper: #f8fafc;
+  --panel: #ffffff;
+  --panel-card: #f1f5f9;
+  --panel-input: #e2e8f0;
+  --ink: #0f172a;
+  --ink-bright: #020617;
+  --muted: #64748b;
+  --muted-dim: #94a3b8;
+  --line: rgba(15, 23, 42, 0.10);
+  --line-subtle: rgba(15, 23, 42, 0.05);
+  --line-strong: rgba(15, 23, 42, 0.22);
+  --accent: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-muted: rgba(2, 132, 199, 0.10);
+  --accent-border: rgba(2, 132, 199, 0.30);
+  --coral: #e11d48;
+  --coral-muted: rgba(225, 29, 72, 0.12);
+  --periwinkle: #4f46e5;
+  --periwinkle-muted: rgba(79, 70, 229, 0.12);
+  --gold: #d97706;
+  --gold-muted: rgba(217, 119, 6, 0.12);
+  --success: #059669;
+}
+
 @layer base {
-  :root {
-    color-scheme: light dark;
+  * {
+    box-sizing: border-box;
   }
 
-  html.light body {
-    background-color: #f8fafc;
-    color: #0f172a;
-  }
-
-  html.dark body {
-    background-color: #0b0d13;
-    color: #f8fafc;
+  html {
+    scroll-behavior: smooth;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Inter", "Segoe UI", Roboto, sans-serif;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     min-height: 100vh;
     overflow-x: hidden;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    margin: 0;
+    transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  ::selection {
+    background-color: var(--accent);
+    color: var(--paper);
+  }
+
+  button, input, textarea, select {
+    font-family: inherit;
   }
 
   :focus-visible {
-    outline: 2px solid #6366f1;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-/* Clean, modern scrollbars */
+.font-mono-tech {
+  font-family: 'DM Mono', monospace;
+}
+
+/* Clean, hairline scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(150, 150, 150, 0.25);
-  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.25);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(150, 150, 150, 0.4);
+  background: var(--accent);
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.15s ease-out forwards;
+@keyframes signalPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 
-.animate-slideUp {
-  animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes receiptPulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-signal {
+  animation: signalPulse 1.4s infinite ease-in-out;
+}
+
+.animate-receipt {
+  animation: receiptPulse 1.2s infinite ease-in-out;
 }

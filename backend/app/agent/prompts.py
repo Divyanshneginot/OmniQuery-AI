@@ -1,14 +1,24 @@
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 
-def get_sql_generation_prompt(schema_info: Dict[str, Any], user_query: str) -> str:
+def get_sql_generation_prompt(schema_info: Dict[str, Any], user_query: str, history: Optional[list] = None) -> str:
     schema_str = json.dumps(schema_info, indent=2, default=str)
+    history_section = ""
+    if history:
+        history_lines = []
+        for turn in history[-3:]:  # Last 3 turns for context
+            q = turn.get("query", "")
+            s = turn.get("sql", "")
+            history_lines.append(f"- User: \"{q}\"\n  Executed SQL: {s}")
+        if history_lines:
+            history_section = "\n### RECENT CONVERSATION HISTORY:\n" + "\n".join(history_lines) + "\n"
+
     return f"""You are an elite ClickHouse & SQL Architect for 'OmniQuery AI', an autonomous analytical agent.
 Your mission is to translate user natural language questions into precise, high-performance ClickHouse SQL queries.
 
 ### DATABASE SCHEMAS AVAILABLE:
 {schema_str}
-
+{history_section}
 ### CLICKHOUSE DIALECT & RULES:
 1. Always generate valid ClickHouse SQL.
 2. Use proper aggregation functions:
@@ -25,9 +35,10 @@ Your mission is to translate user natural language questions into precise, high-
 6. Comparative & Top Rankings: If the user asks for 'top', 'highest', 'leading', 'best', or 'lowest' (e.g. 'Which movie genre yielded highest net profit...', 'Top streaming service by error rate...'):
    - ALWAYS return the top 5 to 10 ranked records (e.g. `LIMIT 6` or `LIMIT 10`) ordered descending by that metric rather than `LIMIT 1`. This provides crucial comparative context and prevents single-item data drop-offs. Only use `LIMIT 1` if the user explicitly writes 'only 1' or 'single result'.
 7. Cap queries without explicit limits with `LIMIT 50` to prevent payload bloat.
-8. Only return a single clean SQL query inside a markdown ```sql ... ``` code block. Do NOT include extraneous conversational filler.
+8. If this is a follow-up question referencing previous results, use the conversation history to resolve contextual pronouns and filters.
+9. Only return a single clean SQL query inside a markdown ```sql ... ``` code block. Do NOT include extraneous conversational filler.
 
-### USER QUERY:
+### CURRENT USER QUERY:
 "{user_query}"
 
 Generate the optimal SQL query:"""

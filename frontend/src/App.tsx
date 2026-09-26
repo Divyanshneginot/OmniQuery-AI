@@ -5,11 +5,9 @@ import {
   BrainCircuit, 
   Activity, 
   X, 
-  ChevronRight,
   Upload,
   CornerDownLeft,
-  RotateCcw,
-  Sparkles
+  RotateCcw
 } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
@@ -84,6 +82,8 @@ export const App: React.FC = () => {
   const [isWarmingUp, setIsWarmingUp] = useState(false);
   const [queryResult, setQueryResult] = useState<QueryResultPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string>(() => `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+  const [turnCount, setTurnCount] = useState<number>(0);
   const [queryHistory, setQueryHistory] = useState<string[]>([
     'Which movie genres yielded the highest net profit across European screens in Q2?',
     'Show me 95th percentile streaming latency and error counts per service endpoint.',
@@ -185,7 +185,7 @@ export const App: React.FC = () => {
       const response = await fetch(`${API_BASE_URL}/query/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q }),
+        body: JSON.stringify({ query: q, session_id: sessionId }),
       });
 
       if (!response.ok) {
@@ -216,6 +216,7 @@ export const App: React.FC = () => {
             } else if (eventData.type === 'complete' || eventData.type === 'result') {
               const payload = eventData.payload ?? eventData.data ?? eventData;
               setQueryResult(payload);
+              setTurnCount(prev => prev + 1);
               mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
               showToast(`Executed in ${payload.execution_time_ms}ms (${payload.total_rows} rows)`);
             } else if (eventData.type === 'error') {
@@ -260,10 +261,16 @@ export const App: React.FC = () => {
   };
 
   const handleNewAnalysis = () => {
+    if (sessionId) {
+      fetch(`${API_BASE_URL}/session/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+    }
+    setSessionId(`session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+    setTurnCount(0);
     setQueryResult(null);
     setSteps([]);
     setError(null);
     setQuery('');
+    showToast('New analysis session initialized');
     setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
@@ -333,6 +340,7 @@ export const App: React.FC = () => {
             downloadCsv(queryResult.columns, queryResult.rows);
             showToast(`Exported ${queryResult.rows.length} rows to CSV`);
           } : undefined}
+          lastLatency={queryResult?.execution_time_ms}
         />
 
         {/* Scrollable Conversational Feed */}
@@ -341,30 +349,38 @@ export const App: React.FC = () => {
             
             {/* Warming Up Notice */}
             {isWarmingUp && !health && (
-              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between gap-3 animate-fadeIn">
-                <div className="flex items-center gap-2.5">
+              <div className="p-3.5 border border-[var(--gold)]/40 bg-[var(--gold-muted)] text-[var(--gold)] text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2.5 font-mono-tech text-[11px]">
                   <span className="relative flex h-2 w-2 flex-shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--gold)] opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--gold)]" />
                   </span>
                   <span>
-                    <strong>Cloud Instance Warming Up:</strong> Render free tier instance is waking up (~30s). Live queries will execute smoothly as soon as connected.
+                    <strong>CLOUD INSTANCE WARMING UP:</strong> Render container waking up (~30s). Live queries will execute smoothly as soon as connected.
                   </span>
                 </div>
               </div>
             )}
             
-            {/* User Inquiry Message */}
+            {/* User Inquiry Decision Guide / Header */}
             {(queryResult || isStreaming) && (
-              <div className="flex items-start gap-3.5 pb-2">
-                <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
-                  <Sparkles className="h-4 w-4" />
-                </div>
-                <div className="flex-1 pt-0.5">
-                  <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-0.5">Executive Inquiry</div>
-                  <div className="text-base text-slate-900 dark:text-white font-medium leading-relaxed">
+              <div className="border border-[var(--line-strong)] bg-[var(--panel-card)] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fadeIn">
+                <div className="space-y-1 max-w-3xl">
+                  <div className="flex items-center gap-2 font-mono-tech text-[10px] tracking-[0.14em] uppercase text-[var(--accent)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+                    <span>Active Inquiry</span>
+                  </div>
+                  <div className="text-base sm:text-lg text-[var(--ink-bright)] font-normal tracking-[-0.02em] leading-snug">
                     {query || queryResult?.user_query}
                   </div>
+                </div>
+
+                <div className="font-mono-tech text-[9px] tracking-wider uppercase text-[var(--muted)] flex items-center gap-2 border-t sm:border-t-0 sm:border-l border-[var(--line)] pt-2 sm:pt-0 sm:pl-4 self-start sm:self-auto">
+                  <span className={isStreaming ? "text-[var(--accent)] font-semibold" : "text-[var(--muted-dim)]"}>1 Ingest</span>
+                  <span className="text-[var(--line-strong)]">/</span>
+                  <span className={isStreaming ? "text-[var(--accent)] font-semibold" : "text-[var(--muted-dim)]"}>2 Plan SQL</span>
+                  <span className="text-[var(--line-strong)]">/</span>
+                  <span className={!isStreaming && queryResult ? "text-[var(--accent)] font-bold" : "text-[var(--muted-dim)]"}>3 Verify OLAP</span>
                 </div>
               </div>
             )}
@@ -373,26 +389,26 @@ export const App: React.FC = () => {
             {error && (() => {
               const { friendly, technical } = sanitizeErrorMessage(error);
               return (
-                <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#141620] border border-amber-200/80 dark:border-amber-900/40 shadow-xs space-y-3.5 animate-fadeIn">
+                <div className="p-4 sm:p-5 border border-[var(--coral)]/40 bg-[var(--panel-card)] space-y-3.5 animate-fadeIn">
                   <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200/80 dark:border-amber-800/80 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
-                      <AlertCircle className="h-4 w-4" />
+                    <div className="p-1.5 border border-[var(--coral)] text-[var(--coral)] flex-shrink-0">
+                      <AlertCircle className="h-3.5 w-3.5" />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      <h4 className="text-[10px] font-mono-tech uppercase tracking-wider text-[var(--coral)]">
                         Analysis Notice
                       </h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      <p className="text-xs text-[var(--ink)] leading-relaxed">
                         {friendly}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--line)]">
                     <button
                       type="button"
                       onClick={() => handleRunQuery()}
-                      className="px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                      className="px-3 py-1.5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-input)] text-[var(--ink)] hover:text-[var(--accent)] text-[10px] font-mono-tech uppercase tracking-wider transition-all flex items-center gap-1.5"
                     >
                       <RotateCcw className="h-3 w-3" />
                       <span>Retry Analysis</span>
@@ -400,25 +416,25 @@ export const App: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleSelectQuery(CURATED_PROMPTS[1].query)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      className="px-3 py-1.5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-card)] text-[var(--muted)] hover:text-[var(--ink)] text-[10px] font-mono-tech uppercase tracking-wider transition-colors"
                     >
                       Try Telemetry Prompt
                     </button>
                     <button
                       type="button"
                       onClick={() => handleSelectQuery(CURATED_PROMPTS[0].query)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      className="px-3 py-1.5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-card)] text-[var(--muted)] hover:text-[var(--ink)] text-[10px] font-mono-tech uppercase tracking-wider transition-colors"
                     >
                       Try Box Office Prompt
                     </button>
                   </div>
 
                   {technical && (
-                    <details className="pt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                      <summary className="cursor-pointer hover:text-slate-600 dark:hover:text-slate-400 transition-colors font-medium">
-                        Diagnostic details
+                    <details className="pt-1 text-[10px] font-mono-tech text-[var(--muted)]">
+                      <summary className="cursor-pointer hover:text-[var(--ink)] transition-colors">
+                        Diagnostic details [+]
                       </summary>
-                      <pre className="mt-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-400 overflow-x-auto whitespace-pre-wrap">
+                      <pre className="mt-2 p-2.5 border border-[var(--line)] bg-[var(--paper)] text-[10px] font-mono-tech text-[var(--muted)] overflow-x-auto whitespace-pre-wrap">
                         {technical}
                       </pre>
                     </details>
@@ -435,63 +451,78 @@ export const App: React.FC = () => {
               <ResultsWorkbench
                 payload={queryResult}
                 onSelectFollowup={handleSelectQuery}
+                onDrilldown={handleSelectQuery}
                 isLoading={isStreaming}
                 onShowToast={showToast}
               />
             )}
 
-            {/* Empty State / Welcome Screen */}
+            {/* Empty State / Editorial Hero */}
             {!queryResult && steps.length === 0 && !isStreaming && (
-              <div className="py-8 space-y-8 animate-fadeIn">
+              <div className="py-6 sm:py-12 space-y-10 animate-fadeIn">
                 
-                {/* Header Welcome */}
-                <div className="text-center space-y-3">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 text-xs font-medium border border-slate-200 dark:border-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span>ClickHouse GCP • 30k Live Records</span>
+                {/* Hero Section */}
+                <div className="space-y-4 max-w-3xl">
+                  <div className="flex items-center gap-2.5 font-mono-tech text-[10px] tracking-[0.14em] uppercase text-[var(--accent)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-signal" />
+                    <span>ANALYTICAL INSTRUMENT · CLICKHOUSE GCP · 30,000 RECORDS</span>
                   </div>
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
-                    OmniQuery Studio
-                  </h2>
-                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
-                    Instant natural language intelligence across theatrical box office returns, streaming CDN QoS telemetry, and audience sentiment.
+                  
+                  <h1 className="text-3xl sm:text-5xl lg:text-6xl font-light tracking-[-0.05em] text-[var(--ink-bright)] leading-[0.96]">
+                    Interrogate the data<br className="hidden sm:inline" /> before you commit.
+                  </h1>
+                  
+                  <p className="text-xs sm:text-sm text-[var(--muted)] max-w-xl font-normal leading-relaxed pt-1">
+                    Instant natural language intelligence across theatrical gross, edge CDN telemetry, and audience sentiment. ClickHouse OLAP executes your queries in milliseconds with mathematical proof.
                   </p>
                 </div>
 
-                {/* 3 Curated Prompt Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                  {CURATED_PROMPTS.map((item, idx) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={idx}
-                        onClick={() => handleSelectQuery(item.query)}
-                        className="text-left p-4 rounded-2xl bg-white dark:bg-[#141620] border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/60 shadow-2xs transition-all flex flex-col justify-between group"
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="h-8 w-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                              <Icon className="h-4 w-4" />
-                            </div>
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
-                              {item.metric}
-                            </span>
-                          </div>
-                          <h3 className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                            {item.title}
-                          </h3>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                            {item.description}
-                          </p>
-                        </div>
+                {/* Section Head */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-[var(--line)] pb-2.5">
+                    <span className="font-mono-tech text-[10px] tracking-wider uppercase text-[var(--muted)] font-medium">
+                      Curated Studio Benchmarks
+                    </span>
+                    <span className="font-mono-tech text-[9px] tracking-widest uppercase text-[var(--accent)]">
+                      Ready to Run
+                    </span>
+                  </div>
 
-                        <div className="pt-3 flex items-center justify-between text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform">
-                          <span>Explore</span>
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </div>
-                      </button>
-                    );
-                  })}
+                  {/* 3 Curated Prompt Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {CURATED_PROMPTS.map((item, idx) => {
+                      const IconComponent = item.icon;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleSelectQuery(item.query)}
+                          className="text-left p-5 border border-[var(--line)] hover:border-[var(--line-strong)] bg-[var(--panel-card)] hover:-translate-y-0.5 transition-all flex flex-col justify-between group relative"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-4">
+                              <span className="p-1.5 border border-[var(--line)] bg-[var(--panel)] text-[var(--accent)]">
+                                <IconComponent className="h-3.5 w-3.5" />
+                              </span>
+                              <span className="font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)] border border-[var(--line)] px-1.5 py-0.5">
+                                {item.metric}
+                              </span>
+                            </div>
+                            <h3 className="text-xs sm:text-sm font-medium text-[var(--ink-bright)] group-hover:text-[var(--accent)] transition-colors">
+                              {item.title}
+                            </h3>
+                            <p className="text-[11px] text-[var(--muted)] mt-1.5 leading-relaxed">
+                              {item.description}
+                            </p>
+                          </div>
+
+                          <div className="mt-5 pt-3 border-t border-[var(--line)] flex items-center justify-between font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)] group-hover:text-[var(--accent)] transition-colors">
+                            <span>Execute</span>
+                            <span>START ↘</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
               </div>
@@ -500,23 +531,23 @@ export const App: React.FC = () => {
           </div>
         </main>
 
-        {/* 3. Bottom Input Dock (Linear / Julius Style) */}
-        <footer className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-[#0f1118]/90 backdrop-blur-md flex-shrink-0 flex justify-center">
+        {/* 3. Bottom Input Dock (Elsewhere Instrument Console) */}
+        <footer className="p-4 sm:p-5 border-t border-[var(--line)] bg-[var(--paper)]/95 backdrop-blur-xl flex-shrink-0 flex justify-center">
           <div className="w-full max-w-4xl xl:max-w-5xl">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleRunQuery();
               }}
-              className="relative rounded-2xl border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-[#161822] shadow-xs focus-within:border-slate-900 dark:focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-900 dark:focus-within:ring-slate-400 transition-all p-1.5 sm:p-2 flex items-center gap-2"
+              className="border border-[var(--line-strong)] focus-within:border-[var(--accent)] bg-[var(--panel-input)] transition-all p-1.5 sm:p-2 flex items-center gap-2"
             >
               <button
                 type="button"
                 onClick={() => setIsUploadOpen(true)}
                 title="Upload custom dataset"
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-2 text-[var(--muted)] hover:text-[var(--accent)] hover:bg-[var(--panel-card)] border border-transparent hover:border-[var(--line)] transition-colors"
               >
-                <Upload className="h-4 w-4" />
+                <Upload className="h-3.5 w-3.5" />
               </button>
 
               <input
@@ -526,35 +557,48 @@ export const App: React.FC = () => {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Ask about theatrical revenue, streaming QoS, or audience feedback..."
                 disabled={isStreaming}
-                className="flex-1 text-xs sm:text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 bg-transparent focus:outline-none px-1"
+                className="flex-1 text-xs sm:text-sm text-[var(--ink)] placeholder-[var(--muted-dim)] bg-transparent focus:outline-none px-2"
               />
 
               {query && !isStreaming && (
                 <button
                   type="button"
                   onClick={() => setQuery('')}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                  className="text-[var(--muted)] hover:text-[var(--ink)] p-1.5"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
 
-              <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                <span>Gemini 3.6 Flash</span>
+              {turnCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleNewAnalysis}
+                  title="Active conversation memory. Click to reset thread."
+                  className="hidden sm:flex items-center gap-1.5 px-2 py-1 border border-[var(--accent)] bg-[var(--accent-muted)] font-mono-tech text-[9px] uppercase tracking-wider text-[var(--ink-bright)] hover:border-[var(--coral)] hover:text-[var(--coral)] transition-colors"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
+                  <span>Turn {turnCount} (Reset ↺)</span>
+                </button>
+              )}
+
+              <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 border border-[var(--line)] bg-[var(--panel-card)] font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                <span>GEMINI 3.6 FLASH</span>
               </div>
 
               <button
                 type="submit"
                 disabled={isStreaming || !query.trim()}
-                className="h-8 w-8 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-950 flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-30 disabled:pointer-events-none flex-shrink-0 shadow-2xs"
+                className="px-3.5 py-1.5 bg-[var(--ink-bright)] text-[var(--paper)] hover:bg-[var(--accent)] font-mono-tech text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:pointer-events-none flex-shrink-0"
               >
-                <CornerDownLeft className="h-3.5 w-3.5" />
+                <span>Run</span>
+                <CornerDownLeft className="h-3 w-3" />
               </button>
             </form>
 
-            <div className="flex items-center justify-between px-2 pt-1.5 text-[10px] text-slate-400 dark:text-slate-500">
-              <span>Connected to ClickHouse Cloud on GCP</span>
-              <span className="hidden sm:inline">Press <kbd className="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-slate-500 dark:text-slate-400">↵ Return</kbd> to analyze</span>
+            <div className="flex items-center justify-between px-1 pt-2 font-mono-tech text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              <span>ClickHouse Cloud OLAP · Cluster Connected</span>
+              <span className="hidden sm:inline">Press <kbd className="font-mono-tech bg-[var(--panel-card)] border border-[var(--line)] px-1 py-0.5 text-[var(--ink)]">↵ Return</kbd> to analyze</span>
             </div>
           </div>
         </footer>

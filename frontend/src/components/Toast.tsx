@@ -37,32 +37,39 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
     switch (toast.type) {
       case 'success':
         return {
-          icon: <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />,
-          classes: 'border-emerald-200 dark:border-emerald-800/60 bg-white/95 dark:bg-[#141620]/95 text-slate-900 dark:text-slate-100'
+          icon: <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />,
+          status: 'SUCCESS'
         };
       case 'error':
         return {
-          icon: <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />,
-          classes: 'border-rose-200 dark:border-rose-800/60 bg-white/95 dark:bg-[#141620]/95 text-slate-900 dark:text-slate-100'
+          icon: <AlertCircle className="h-4 w-4 text-rose-400 flex-shrink-0" />,
+          status: 'ERR'
         };
       default:
         return {
-          icon: <Info className="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />,
-          classes: 'border-indigo-200 dark:border-indigo-800/60 bg-white/95 dark:bg-[#141620]/95 text-slate-900 dark:text-slate-100'
+          icon: <Info className="h-4 w-4 text-[var(--accent)] flex-shrink-0" />,
+          status: 'INFO'
         };
     }
   };
 
-  const { icon, classes } = getToastConfig();
+  const { icon, status } = getToastConfig();
 
   return (
-    <div className={`pointer-events-auto border ${classes} px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 min-w-[260px] max-w-sm backdrop-blur-md animate-fadeIn`}>
+    <div className="pointer-events-auto border border-[var(--line)] bg-[var(--panel-card)] text-slate-100 p-3.5 shadow-2xl flex items-start gap-3 min-w-[280px] max-w-sm backdrop-blur-md animate-fadeIn">
       {icon}
-      <span className="flex-1 text-[11px] font-medium leading-tight">{toast.message}</span>
+      <div className="flex-1 min-w-0">
+        <div className="font-mono-tech text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">
+          RECEIPT // {status}
+        </div>
+        <p className="font-mono-tech text-[11px] text-slate-200 leading-tight">
+          {toast.message}
+        </p>
+      </div>
       <button
         onClick={() => onDismiss(toast.id)}
         aria-label="Dismiss toast"
-        className="text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300 p-0.5 transition-colors rounded"
+        className="text-slate-500 hover:text-slate-200 p-0.5 transition-colors"
       >
         <X className="h-3.5 w-3.5" />
       </button>

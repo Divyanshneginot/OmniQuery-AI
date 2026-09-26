@@ -26,9 +26,7 @@ import {
   ArrowRight,
   Search,
   X,
-  Code,
-  Award,
-  Sparkles
+  Code
 } from 'lucide-react';
 import type { QueryResultPayload } from '../types';
 import { SemanticSearchWidget } from './SemanticSearchWidget';
@@ -39,9 +37,10 @@ interface ResultsWorkbenchProps {
   onSelectFollowup: (query: string) => void;
   isLoading?: boolean;
   onShowToast: (msg: string) => void;
+  onDrilldown?: (query: string) => void;
 }
 
-const PALETTE = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899'];
+const PALETTE = ['#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f43f5e', '#a78bfa'];
 
 const currencyFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
 const compactFmt = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
@@ -99,17 +98,17 @@ interface TooltipEntry {
 const CustomTooltip = ({ active, payload: tp, label }: { active?: boolean; payload?: TooltipEntry[]; label?: string }) => {
   if (active && tp && tp.length) {
     return (
-      <div className="bg-white dark:bg-[#161822] border border-slate-200 dark:border-slate-800 p-3 rounded-xl shadow-lg text-xs">
-        <p className="font-semibold text-slate-900 dark:text-white mb-1.5 pb-1 border-b border-slate-100 dark:border-slate-800">
+      <div className="bg-[var(--panel-card)] border border-[var(--line)] p-3 text-xs shadow-xl font-mono-tech">
+        <p className="font-semibold text-[var(--ink-bright)] mb-1.5 pb-1 border-b border-[var(--line)]">
           {label}
         </p>
         {tp.map((entry, index: number) => (
-          <div key={index} className="flex items-center justify-between gap-4 py-0.5 text-slate-600 dark:text-slate-300">
+          <div key={index} className="flex items-center justify-between gap-4 py-0.5 text-[var(--muted)]">
             <span className="flex items-center gap-1.5">
-              {entry.color && <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />}
+              {entry.color && <span className="h-1.5 w-1.5" style={{ backgroundColor: entry.color }} />}
               <span>{entry.name}:</span>
             </span>
-            <span className="font-semibold text-slate-900 dark:text-white font-mono">
+            <span className="font-semibold text-[var(--ink-bright)]">
               {typeof entry.value === 'number'
                 ? formatNumericValue(entry.value, entry.name)
                 : entry.value}
@@ -126,7 +125,8 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
   payload,
   onSelectFollowup,
   isLoading: _isLoading,
-  onShowToast
+  onShowToast,
+  onDrilldown
 }) => {
   const isVectorSearch = payload.columns.some(c => 
     c.toLowerCase().includes('score') || 
@@ -351,6 +351,15 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                 innerRadius={50}
                 paddingAngle={3}
                 label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                className="cursor-pointer hover:opacity-85 transition-opacity"
+                onClick={(entry: any) => {
+                  const target = entry?.name ?? entry?.[xKey] ?? entry?.payload?.[xKey];
+                  if (target) {
+                    const drillQuery = `Analyze audience reviews and streaming metrics for ${target}`;
+                    (onDrilldown || onSelectFollowup)(drillQuery);
+                    onShowToast(`Drilldown activated: "${target}"`);
+                  }
+                }}
               >
                 {pieSlice.map((_, idx) => (
                   <Cell key={`cell-${idx}`} fill={PALETTE[idx % PALETTE.length]} />
@@ -387,6 +396,15 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                   fill={PALETTE[i % PALETTE.length]}
                   radius={[6, 6, 0, 0]}
                   maxBarSize={44}
+                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={(entry: any) => {
+                    const target = entry?.[xKey] || entry?.payload?.[xKey];
+                    if (target) {
+                      const drillQuery = `Drill down into ${target}: break down gross revenue and territory performance`;
+                      (onDrilldown || onSelectFollowup)(drillQuery);
+                      onShowToast(`Drilldown activated: "${target}"`);
+                    }
+                  }}
                 />
               ))}
             </BarChart>
@@ -399,87 +417,101 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
   const totalPages = Math.ceil(filteredAndSortedRows.length / pageSize) || 1;
 
   return (
-    <div className="space-y-5 animate-fadeIn">
+    <div className="space-y-6 animate-fadeIn">
       
+      {/* 1. Synthesis Card / Executive Finding */}
       {chart_spec.executive_summary && (
-        <div className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-normal bg-white dark:bg-[#141620] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex items-start gap-3">
-          <div className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5">
-            <Sparkles className="h-4 w-4" />
+        <div className="border border-[var(--line)] bg-[var(--panel-card)] p-4 sm:p-5 flex items-start gap-3.5 group hover:border-[var(--line-strong)] transition-colors">
+          <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] mt-1.5 flex-shrink-0" />
+          <div className="flex-1 space-y-1">
+            <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[var(--accent)] block font-medium">
+              Executive Finding
+            </span>
+            <p className="text-xs sm:text-sm text-[var(--ink-bright)] leading-relaxed font-normal">
+              {chart_spec.executive_summary}
+            </p>
           </div>
-          <p className="flex-1">{chart_spec.executive_summary}</p>
         </div>
       )}
 
-      {/* 3 Balanced Metric KPI Cards */}
+      {/* 2. Balanced Metric Ledger Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {displayMetrics.map((metric, idx) => (
-          <div key={idx} className="p-4 rounded-2xl bg-white dark:bg-[#141620] border border-slate-200/90 dark:border-slate-800/90 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 transition-all shadow-xs group">
+          <div
+            key={idx}
+            className="p-4 border border-[var(--line)] hover:border-[var(--line-strong)] bg-[var(--panel-card)] transition-colors flex flex-col justify-between group"
+          >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{metric.label}</span>
+              <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[var(--muted)]">
+                {metric.label}
+              </span>
               {renderTrendIcon(metric.trend)}
             </div>
-            <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1.5 tracking-tight">{metric.value}</div>
+            <div className="text-2xl sm:text-3xl font-light font-mono-tech text-[var(--ink-bright)] mt-2 tracking-tight">
+              {metric.value}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#141620] overflow-hidden shadow-2xs">
+      {/* 3. Main Analytical Workbench */}
+      <div className="border border-[var(--line)] bg-[var(--panel-card)] overflow-hidden">
         
-        <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        {/* Head Bar */}
+        <div className="px-4 sm:px-5 py-3 border-b border-[var(--line)] flex flex-wrap items-center justify-between gap-3 bg-[var(--panel)]">
           <div>
-            <h3 className="text-xs font-bold text-slate-900 dark:text-white">
-              {chart_spec.title || 'Analysis Visualization'}
+            <h3 className="text-xs font-semibold text-[var(--ink-bright)]">
+              {chart_spec.title || 'Analytical Telemetry Synthesis'}
             </h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              ClickHouse OLAP • {total_rows} records returned
+            <p className="font-mono-tech text-[9px] text-[var(--muted)] uppercase tracking-wider mt-0.5">
+              ClickHouse OLAP · {total_rows} records returned
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-[#1e2130] text-xs">
+            <div className="flex items-center border border-[var(--line)] bg-[var(--panel-input)] p-0.5">
               {isSingleRecord && (
                 <button
                   onClick={() => setViewMode('spotlight')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition-all flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 font-mono-tech text-[10px] uppercase tracking-wider transition-all ${
                     viewMode === 'spotlight'
-                      ? 'bg-white dark:bg-[#12141d] text-slate-900 dark:text-white shadow-2xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      ? 'bg-[var(--ink-bright)] text-[var(--paper)] font-semibold'
+                      : 'text-[var(--muted)] hover:text-[var(--ink-bright)]'
                   }`}
                 >
-                  <Sparkles className="h-3 w-3 text-indigo-500" />
-                  <span>Spotlight</span>
+                  Spotlight
                 </button>
               )}
               <button
                 onClick={() => setViewMode('chart')}
-                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                className={`px-2.5 py-1 font-mono-tech text-[10px] uppercase tracking-wider transition-all ${
                   viewMode === 'chart'
-                    ? 'bg-white dark:bg-[#12141d] text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-[var(--ink-bright)] text-[var(--paper)] font-semibold'
+                    : 'text-[var(--muted)] hover:text-[var(--ink-bright)]'
                 }`}
               >
                 Chart
               </button>
               <button
                 onClick={() => setViewMode('table')}
-                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                className={`px-2.5 py-1 font-mono-tech text-[10px] uppercase tracking-wider transition-all ${
                   viewMode === 'table'
-                    ? 'bg-white dark:bg-[#12141d] text-slate-900 dark:text-white shadow-2xs'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-[var(--ink-bright)] text-[var(--paper)] font-semibold'
+                    : 'text-[var(--muted)] hover:text-[var(--ink-bright)]'
                 }`}
               >
-                Table
+                Ledger
               </button>
               {isVectorSearch && (
                 <button
                   onClick={() => setViewMode('vector')}
-                  className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                  className={`px-2.5 py-1 font-mono-tech text-[10px] uppercase tracking-wider transition-all ${
                     viewMode === 'vector'
-                      ? 'bg-white dark:bg-[#12141d] text-slate-900 dark:text-white shadow-2xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      ? 'bg-[var(--ink-bright)] text-[var(--paper)] font-semibold'
+                      : 'text-[var(--muted)] hover:text-[var(--ink-bright)]'
                   }`}
                 >
-                  Semantic Clusters
+                  Semantic
                 </button>
               )}
             </div>
@@ -487,35 +519,36 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
             <button
               onClick={handleExportCsv}
               aria-label="Download CSV"
-              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="px-2.5 py-1 border border-[var(--line)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--ink-bright)] bg-[var(--panel-input)] font-mono-tech text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
               title="Download CSV"
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download className="h-3 w-3" />
+              <span>CSV ↘</span>
             </button>
           </div>
         </div>
 
+        {/* View Mode: Spotlight */}
         {viewMode === 'spotlight' && isSingleRecord && (
           <div className="p-5 sm:p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-slate-50 dark:bg-[#161925] border border-slate-200/80 dark:border-slate-800">
-              <div className="space-y-1.5">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold border border-indigo-200/60 dark:border-indigo-800/60">
-                  <Award className="h-3 w-3" />
-                  <span>Top Match • ClickHouse OLAP</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border border-[var(--line)] bg-[var(--panel)]">
+              <div className="space-y-1">
+                <div className="font-mono-tech text-[9px] text-[var(--accent)] uppercase tracking-[0.14em]">
+                  PRIMARY MATCH · CLICKHOUSE OLAP
                 </div>
-                <h4 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+                <h4 className="text-xl sm:text-2xl font-light text-[var(--ink-bright)] tracking-tight">
                   {String(rows[0][xKey] ?? rows[0][columns[0]] ?? 'Result')}
                 </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-[11px] text-[var(--muted)]">
                   Primary record matching analytical criteria across studio dataset
                 </p>
               </div>
 
               <div className="sm:text-right">
-                <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                <span className="font-mono-tech text-[9px] text-[var(--muted)] uppercase tracking-wider block">
                   {yKeys[0]?.replace(/_/g, ' ') || 'Metric'}
                 </span>
-                <span className="text-2xl sm:text-3xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono tracking-tight block mt-0.5">
+                <span className="text-2xl sm:text-3xl font-light text-[var(--accent)] font-mono-tech tracking-tight block mt-0.5">
                   {typeof rows[0][yKeys[0]] === 'number'
                     ? formatNumericValue(rows[0][yKeys[0]], yKeys[0])
                     : String(rows[0][yKeys[0]] ?? '')}
@@ -524,19 +557,19 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
             </div>
 
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Record Breakdown
+              <div className="font-mono-tech text-[9px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                Field Breakdown
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {columns.map((col) => (
                   <div
                     key={col}
-                    className="p-3 rounded-xl bg-white dark:bg-[#12141e] border border-slate-200/80 dark:border-slate-800/80 shadow-2xs"
+                    className="p-3 border border-[var(--line)] bg-[var(--panel)] font-mono-tech"
                   >
-                    <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate uppercase tracking-wider">
+                    <div className="text-[9px] text-[var(--muted)] truncate uppercase tracking-wider">
                       {col.replace(/_/g, ' ')}
                     </div>
-                    <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate mt-1 font-mono">
+                    <div className="text-xs font-medium text-[var(--ink-bright)] truncate mt-1">
                       {typeof rows[0][col] === 'number'
                         ? formatNumericValue(rows[0][col], col)
                         : String(rows[0][col] ?? '-')}
@@ -548,32 +581,39 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
           </div>
         )}
 
+        {/* View Mode: Chart */}
         {viewMode === 'chart' && (
           <div className="p-5 space-y-4">
-            <div className="flex items-center justify-end gap-1 text-[11px]">
-              {(['bar', 'line', 'area', 'pie'] as const).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setChartType(type)}
-                  className={`px-2 py-0.5 rounded capitalize transition-colors ${
-                    chartType === type
-                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white font-medium'
-                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="hidden sm:inline-flex items-center gap-1.5 font-mono-tech text-[9px] uppercase tracking-wider text-[var(--accent)] border border-[var(--accent)]/30 bg-[var(--accent-muted)] px-2 py-0.5">
+                <span>⚡ Interactive · Click any bar or table row to drill down</span>
+              </span>
+              <div className="flex items-center gap-1 font-mono-tech text-[9px] uppercase ml-auto">
+                {(['bar', 'line', 'area', 'pie'] as const).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setChartType(type)}
+                    className={`px-2 py-0.5 border transition-colors ${
+                      chartType === type
+                        ? 'border-[var(--accent)] bg-[var(--accent-muted)] text-[var(--accent)] font-semibold'
+                        : 'border-[var(--line)] text-[var(--muted)] hover:text-[var(--ink-bright)]'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
             </div>
             {renderChart()}
           </div>
         )}
 
+        {/* View Mode: Table / Ledger */}
         {viewMode === 'table' && (
           <div className="p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="relative flex-1 max-w-xs">
-                <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <Search className="h-3.5 w-3.5 text-[var(--muted)] absolute left-2.5 top-2.5" />
                 <input
                   type="text"
                   value={tableSearch}
@@ -582,26 +622,26 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                     setPage(1);
                   }}
                   placeholder="Filter records..."
-                  className="w-full bg-slate-50 dark:bg-[#161822] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1.5 pl-8 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full bg-[var(--panel)] border border-[var(--line)] px-2 py-1.5 pl-8 text-xs font-mono-tech text-[var(--ink-bright)] placeholder-[var(--muted-dim)] focus:outline-none focus:border-[var(--accent)]"
                 />
                 {tableSearch && (
                   <button
                     onClick={() => setTableSearch('')}
                     aria-label="Clear search filter"
-                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    className="absolute right-2.5 top-2.5 text-[var(--muted)] hover:text-[var(--ink)]"
                   >
                     <X className="h-3 w-3" />
                   </button>
                 )}
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Showing {filteredAndSortedRows.length} matching rows
+              <span className="font-mono-tech text-[10px] uppercase text-[var(--muted)]">
+                Showing {filteredAndSortedRows.length} rows
               </span>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <div className="overflow-x-auto border border-[var(--line)] text-xs">
               <table className="w-full text-left">
-                <thead className="bg-slate-50 dark:bg-[#181a26] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 select-none">
+                <thead className="bg-[var(--panel-input)] text-[var(--muted)] border-b border-[var(--line)] select-none font-mono-tech text-[9px] uppercase tracking-wider">
                   <tr>
                     {columns.map(col => (
                       <th
@@ -616,49 +656,63 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                             handleSort(col);
                           }
                         }}
-                        className="px-4 py-2.5 font-semibold cursor-pointer hover:text-slate-900 dark:hover:text-white focus-visible:outline-indigo-500"
+                        className="px-4 py-2.5 font-medium cursor-pointer hover:text-[var(--ink-bright)]"
                       >
                         <div className="flex items-center gap-1.5">
                           <span>{col}</span>
                           {sortCol === col && (
-                            <span className="text-indigo-600 dark:text-indigo-400">{sortAsc ? '↑' : '↓'}</span>
+                            <span className="text-[var(--accent)]">{sortAsc ? '↑' : '↓'}</span>
                           )}
                         </div>
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300 font-mono">
-                  {paginatedRows.map((row, rIdx) => (
-                    <tr key={rIdx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                      {columns.map(col => (
-                        <td key={col} className="px-4 py-2 truncate max-w-[200px]">
-                          {String(row[col] ?? '')}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-[var(--line-subtle)] font-mono-tech text-[11px] text-[var(--ink)]">
+                  {paginatedRows.map((row, rIdx) => {
+                    const primaryVal = row[xKey] ?? row[columns[0]];
+                    return (
+                      <tr
+                        key={rIdx}
+                        onClick={() => {
+                          if (primaryVal) {
+                            const drillQuery = `Filter and examine detailed breakdown for ${primaryVal}`;
+                            (onDrilldown || onSelectFollowup)(drillQuery);
+                            onShowToast(`Drilldown activated: "${primaryVal}"`);
+                          }
+                        }}
+                        className="hover:bg-[var(--panel-input)] cursor-pointer transition-colors group"
+                        title="Click to drill down into this record"
+                      >
+                        {columns.map(col => (
+                          <td key={col} className="px-4 py-2 truncate max-w-[200px] group-hover:text-[var(--accent)] transition-colors">
+                            {String(row[col] ?? '')}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+              <div className="flex items-center justify-between font-mono-tech text-[10px] text-[var(--muted)] pt-1">
                 <span>Page {page} of {totalPages}</span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage(p => Math.max(1, p - 1))}
                     disabled={page === 1}
-                    className="px-2.5 py-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-30"
+                    className="px-2.5 py-1 border border-[var(--line)] hover:border-[var(--accent)] disabled:opacity-30 uppercase"
                   >
-                    Previous
+                    Prev ←
                   </button>
                   <button
                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                     disabled={page === totalPages}
-                    className="px-2.5 py-1 rounded border border-slate-200 dark:border-slate-800 disabled:opacity-30"
+                    className="px-2.5 py-1 border border-[var(--line)] hover:border-[var(--accent)] disabled:opacity-30 uppercase"
                   >
-                    Next
+                    Next →
                   </button>
                 </div>
               </div>
@@ -666,6 +720,7 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
           </div>
         )}
 
+        {/* View Mode: Vector Clusters */}
         {viewMode === 'vector' && (
           <div className="p-4">
             <SemanticSearchWidget rows={payload.rows} columns={payload.columns} />
@@ -673,37 +728,38 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
         )}
       </div>
 
-      <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-slate-50/70 dark:bg-[#12141e]">
+      {/* 4. ClickHouse SQL Drawer (Core Formula) */}
+      <div className="border border-[var(--line)] bg-[var(--panel)]">
         <button
           onClick={() => setIsSqlExpanded(!isSqlExpanded)}
-          className="w-full px-4 py-2.5 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+          className="w-full px-4 py-3 flex items-center justify-between text-xs text-[var(--muted)] hover:text-[var(--ink-bright)] transition-colors"
           aria-expanded={isSqlExpanded}
         >
-          <span className="flex items-center gap-2">
-            <Code className="h-3.5 w-3.5 text-slate-400" />
-            <span className="font-semibold">ClickHouse SQL Query</span>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-normal">
-              ({execution_time_ms}ms execution)
+          <span className="flex items-center gap-2 font-mono-tech text-[10px] uppercase tracking-[0.12em]">
+            <Code className="h-3.5 w-3.5 text-[var(--accent)]" />
+            <span className="font-semibold text-[var(--ink)]">Core Formula / ClickHouse SQL</span>
+            <span className="text-[var(--muted-dim)]">
+              ({execution_time_ms}ms runtime)
             </span>
           </span>
-          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-            {isSqlExpanded ? 'Hide code' : 'View SQL'}
+          <span className="font-mono-tech text-[10px] text-[var(--accent)] uppercase">
+            {isSqlExpanded ? '[-] Hide' : '[+] View Formula'}
           </span>
         </button>
 
         {isSqlExpanded && (
-          <div className="px-4 pb-4 pt-1 border-t border-slate-200 dark:border-slate-800/80 bg-slate-900 text-slate-200 text-xs font-mono">
-            <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-[10px] text-slate-400">
+          <div className="px-4 pb-4 pt-2 border-t border-[var(--line)] bg-[var(--paper)] text-xs font-mono-tech">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--line)] text-[9px] uppercase tracking-wider text-[var(--muted)]">
               <span>Cluster: {payload.database_mode}</span>
               <button
                 onClick={handleCopySql}
-                className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 font-medium"
+                className="flex items-center gap-1 text-[var(--accent)] hover:underline font-medium"
               >
                 {copiedSql ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 <span>{copiedSql ? 'Copied' : 'Copy SQL'}</span>
               </button>
             </div>
-            <pre className="overflow-x-auto py-1 text-indigo-200">
+            <pre className="overflow-x-auto py-1 text-[var(--accent)]">
               <code>{sql_query}</code>
             </pre>
           </div>
@@ -712,8 +768,8 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
 
       {/* 5. Suggested Follow-Up Prompts */}
       {chart_spec.suggested_followups && chart_spec.suggested_followups.length > 0 && (
-        <div className="pt-1 space-y-2">
-          <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+        <div className="pt-2 space-y-2.5">
+          <div className="font-mono-tech text-[9px] uppercase tracking-[0.14em] text-[var(--muted)]">
             Suggested follow-up inquiries:
           </div>
           <div className="flex flex-wrap gap-2">
@@ -721,10 +777,10 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
               <button
                 key={idx}
                 onClick={() => onSelectFollowup(followup)}
-                className="px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#141620] hover:bg-slate-50 dark:hover:bg-slate-800 text-xs text-slate-700 dark:text-slate-300 transition-all shadow-2xs flex items-center gap-1.5 text-left"
+                className="px-3 py-1.5 border border-[var(--line)] hover:border-[var(--accent)] bg-[var(--panel-card)] hover:bg-[var(--panel-input)] text-xs text-[var(--ink)] hover:text-[var(--accent)] transition-all font-mono-tech text-left flex items-center gap-2"
               >
-                <ArrowRight className="h-3 w-3 text-indigo-500 flex-shrink-0" />
-                <span>{followup}</span>
+                <ArrowRight className="h-3 w-3 text-[var(--accent)] flex-shrink-0" />
+                <span className="text-[11px]">{followup}</span>
               </button>
             ))}
           </div>
@@ -734,5 +790,6 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
     </div>
   );
 };
+
 
 

@@ -10,8 +10,11 @@ from app.agent.orchestrator import agent_orchestrator
 
 router = APIRouter()
 
+from typing import Dict, Any, Optional
+
 class QueryRequest(BaseModel):
     query: str
+    session_id: Optional[str] = None
 
 class RawSqlRequest(BaseModel):
     sql: str
@@ -34,6 +37,11 @@ def get_database_schema():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/session/{session_id}")
+def clear_session_memory(session_id: str):
+    agent_orchestrator.sessions.pop(session_id, None)
+    return {"status": "cleared", "session_id": session_id}
+
 @router.post("/query/stream")
 async def stream_query(req: QueryRequest):
     if not req.query.strip():
@@ -44,7 +52,7 @@ async def stream_query(req: QueryRequest):
 
         async def produce_events():
             try:
-                async for event in agent_orchestrator.run_pipeline(req.query):
+                async for event in agent_orchestrator.run_pipeline(req.query, req.session_id):
                     await queue.put(f"data: {json.dumps(event)}\n\n")
             except Exception as e:
                 err_event = {"type": "error", "message": str(e)}

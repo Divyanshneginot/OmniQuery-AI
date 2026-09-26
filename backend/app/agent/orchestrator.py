@@ -7,9 +7,10 @@ import json
 import time
 import asyncio
 import logging
-from typing import AsyncGenerator, Dict, Any, Optional
+from typing import AsyncGenerator, Dict, Any, Optional, List
 from google import genai
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 from app.db.clickhouse_engine import db_engine, sanitize_db_error
 from app.agent.mcp_client import mcp_client
@@ -22,11 +23,28 @@ from app.agent.prompts import (
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+class KeyMetricModel(BaseModel):
+    label: str
+    value: str
+    trend: Optional[str] = "neutral"
+
+class ChartSpecModel(BaseModel):
+    title: str = "Query Results Visualization"
+    chart_type: str = "bar"
+    x_axis_key: str = "name"
+    y_axis_keys: List[str] = Field(default_factory=lambda: ["gross_revenue"])
+    series_names: List[str] = Field(default_factory=lambda: ["Gross Revenue"])
+    color_palette: List[str] = Field(default_factory=lambda: ["#38bdf8", "#818cf8", "#f43f5e"])
+    executive_summary: str = "Query executed successfully and analyzed by OmniQuery AI."
+    key_metrics: List[KeyMetricModel] = Field(default_factory=list)
+    suggested_followups: List[str] = Field(default_factory=list)
+
 class AgentOrchestrator:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
         self.client_initialized = False
+        self.sessions: Dict[str, List[Dict[str, Any]]] = {}
 
         use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").lower() == "true"
         
@@ -60,27 +78,26 @@ class AgentOrchestrator:
         return text.strip()
 
     def _extract_json_from_response(self, text: str) -> Dict[str, Any]:
-        """Extracts JSON from response string."""
+        """Extracts and strictly validates JSON with Pydantic."""
         clean = text.strip()
-        # Remove ```json ... ``` wrapper
         match = re.search(r"```(?:json)?\s*(.*?)\s*```", clean, re.DOTALL | re.IGNORECASE)
         if match:
             clean = match.group(1).strip()
         try:
-            return json.loads(clean)
+            parsed = json.loads(clean)
+            return ChartSpecModel.model_validate(parsed).model_dump()
         except Exception:
-            # Fallback JSON structure
-            return {
-                "title": "Query Results Visualization",
-                "chart_type": "bar",
-                "x_axis_key": "genre" if "genre" in clean else "name",
-                "y_axis_keys": ["gross_revenue"],
-                "series_names": ["Gross Revenue"],
-                "color_palette": ["#3b82f6", "#10b981", "#f59e0b"],
-                "executive_summary": "Query executed successfully and analyzed by OmniQuery AI.",
-                "key_metrics": [{"label": "Status", "value": "Completed", "trend": "positive"}],
-                "suggested_followups": ["Show breakdown by country", "Filter by last 30 days"]
-            }
+            # Fallback validated Pydantic model
+            return ChartSpecModel(
+                title="Query Results Visualization",
+                chart_type="bar",
+                x_axis_key="genre" if "genre" in clean else "name",
+                y_axis_keys=["gross_revenue"],
+                series_names=["Gross Revenue"],
+                executive_summary="Query executed successfully and analyzed by OmniQuery AI.",
+                key_metrics=[KeyMetricModel(label="Status", value="Completed", trend="positive")],
+                suggested_followups=["Show breakdown by country", "Filter by last 30 days"]
+            ).model_dump()
 
     async def _call_gemini_async(self, prompt: str) -> str:
         """Invokes Gemini using Google ADK Agent Runner with direct client fallback (Agentic Cinema Requirement)."""
@@ -141,7 +158,7 @@ class AgentOrchestrator:
                     raise e
         return ""
 
-    async def run_pipeline(self, user_query: str) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run_pipeline(self, user_query: str, session_id: Optional[str] = None) -> AsyncGenerator[Dict[str, Any], None]:
         """Multi-step agent loop yielding streaming SSE thought trace."""
         start_pipeline_time = time.perf_counter()
         
@@ -176,7 +193,7 @@ class AgentOrchestrator:
             "data": {"tables": table_names}
         }
 
-        # Step 2: Planning & SQL Generation
+        # Step 2: Planning & SQL Generation (with conversational thread memory)
         yield {
             "type": "step",
             "step": "sql_planning",
@@ -185,8 +202,9 @@ class AgentOrchestrator:
         }
 
         generated_sql = ""
+        history = self.sessions.get(session_id, []) if session_id else []
         if self.client_initialized:
-            prompt = get_sql_generation_prompt(schema_summary["tables"], user_query)
+            prompt = get_sql_generation_prompt(schema_summary["tables"], user_query, history=history)
             try:
                 raw_response = await self._call_gemini_async(prompt)
                 generated_sql = self._extract_sql_from_response(raw_response)
@@ -250,6 +268,7 @@ class AgentOrchestrator:
                         user_query
                     )
                     try:
+                        failed_sql_for_diff = current_sql
                         repaired_resp = await self._call_gemini_async(healing_prompt)
                         repaired_sql = self._extract_sql_from_response(repaired_resp)
                         if repaired_sql:
@@ -260,8 +279,11 @@ class AgentOrchestrator:
                             "type": "step",
                             "step": "self_healing",
                             "status": "repaired",
-                            "message": f"Query repaired by Gemini (Attempt {attempt}). Retrying execution...",
-                            "data": {"repaired_sql": current_sql}
+                            "message": f"Autonomous SQL dialect repair applied (Attempt {attempt}). Re-executing query...",
+                            "data": {
+                                "failed_sql": failed_sql_for_diff,
+                                "repaired_sql": current_sql
+                            }
                         }
                     except Exception as he:
                         logger.error(f"Self healing failure: {he}")
@@ -350,6 +372,17 @@ class AgentOrchestrator:
 
         total_pipeline_ms = round((time.perf_counter() - start_pipeline_time) * 1000, 2)
 
+        # Persist conversation session memory
+        if session_id:
+            if session_id not in self.sessions:
+                self.sessions[session_id] = []
+            self.sessions[session_id].append({
+                "query": user_query,
+                "sql": current_sql,
+                "summary": chart_spec.get("executive_summary", "")
+            })
+            self.sessions[session_id] = self.sessions[session_id][-10:]
+
         # Final Payload
         yield {
             "type": "complete",
@@ -363,7 +396,8 @@ class AgentOrchestrator:
                 "columns": query_result["columns"],
                 "rows": query_result["rows"],
                 "chart_spec": chart_spec,
-                "database_mode": query_result["database_mode"]
+                "database_mode": query_result["database_mode"],
+                "session_id": session_id
             }
         }
 
