@@ -345,7 +345,7 @@ export const App: React.FC = () => {
 
         {/* Scrollable Conversational Feed */}
         <main ref={mainRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 flex flex-col items-center">
-          <div className="w-full max-w-5xl xl:max-w-6xl space-y-6">
+          <div className="w-full max-w-5xl xl:max-w-6xl space-y-6 pb-20">
             
             {/* Warming Up Notice */}
             {isWarmingUp && !health && (

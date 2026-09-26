@@ -698,11 +698,17 @@ export const ResultsWorkbench: React.FC<ResultsWorkbenchProps> = ({
                         className="hover:bg-[var(--panel-input)] cursor-pointer transition-colors group"
                         title="Click to drill down into this record"
                       >
-                        {columns.map(col => (
-                          <td key={col} className="px-4 py-2 truncate max-w-[200px] group-hover:text-[var(--accent)] transition-colors">
-                            {String(row[col] ?? '')}
-                          </td>
-                        ))}
+                        {columns.map(col => {
+                          const val = row[col];
+                          const formatted = typeof val === 'number'
+                            ? (Number.isInteger(val) ? val.toLocaleString() : val.toLocaleString(undefined, { maximumFractionDigits: 2 }))
+                            : String(val ?? '');
+                          return (
+                            <td key={col} className="px-4 py-2 truncate max-w-[200px] group-hover:text-[var(--accent)] transition-colors">
+                              {formatted}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}

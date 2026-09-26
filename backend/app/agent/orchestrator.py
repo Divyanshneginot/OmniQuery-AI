@@ -456,7 +456,10 @@ class AgentOrchestrator:
         if numeric_cols:
             first_num = numeric_cols[0]
             val_sum = sum(r.get(first_num, 0) for r in rows if isinstance(r.get(first_num), (int, float)))
-            metrics.append({"label": f"Total {first_num.replace('_', ' ').title()}", "value": f"{val_sum:,.1f}" if isinstance(val_sum, float) else f"{val_sum:,}", "trend": "positive"})
+            clean_label = first_num.replace('_', ' ').title()
+            if not clean_label.lower().startswith("total"):
+                clean_label = f"Total {clean_label}"
+            metrics.append({"label": clean_label, "value": f"{val_sum:,.1f}" if isinstance(val_sum, float) else f"{val_sum:,}", "trend": "positive"})
         
         try:
             scanned_raw = result.get('rows_scanned', len(rows))
